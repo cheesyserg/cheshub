@@ -260,8 +260,14 @@ async function tryAutoConnect() {
   if (!navigator.hid) return;
   try {
     const pairedDevices = await navigator.hid.getDevices();
+    
+    // Match VID, PID, AND the custom vendor usage/usagePage
     const match = pairedDevices.find(dev => 
-      TARGET_FILTERS.some(f => f.vendorId === dev.vendorId && f.productId === dev.productId)
+      TARGET_FILTERS.some(f => 
+        f.vendorId === dev.vendorId && 
+        f.productId === dev.productId &&
+        dev.collections.some(c => c.usagePage === f.usagePage && c.usage === f.usage)
+      )
     );
 
     if (match) {
@@ -279,7 +285,7 @@ async function tryAutoConnect() {
       showToast("Auto-connected to AJ139");
     }
   } catch (e) {
-    console.log("Auto-connect skipped or requires user gesture", e);
+    console.warn("Auto-connect failed:", e);
   }
 }
 
@@ -408,7 +414,12 @@ async function testStreamerMode(modeVal) {
 
 async function writeFullConfig() {
   if (!hidDevice || !hidDevice.opened) return connectOrApply();
-  if (isBusBusy) return;
+  
+  // Wait for busy bus rather than aborting the write
+  if (isBusBusy) {
+    setTimeout(writeFullConfig, 50);
+    return;
+  }
   isBusBusy = true;
 
   try {
