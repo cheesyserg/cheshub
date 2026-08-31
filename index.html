@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChesHub | Peripheral Hub</title>
+  <link rel="stylesheet" href="css/hub.css">
+</head>
+<body>
+
+  <div class="hub-container">
+    <header class="hub-header">
+      <div class="brand font-impact">CHES<span>HUB</span></div>
+      <p class="subtitle">Unified Multi-Device Hardware Configurator</p>
+    </header>
+
+    <div class="action-bar">
+      <button class="btn-primary font-impact" id="btn-scan" type="button">+ PAIR / DETECT HARDWARE</button>
+    </div>
+
+    <div class="devices-grid" id="devices-grid">
+      <!-- Deduplicated active devices render here -->
+    </div>
+  </div>
+
+  <script>
+    const REGISTRY = [
+      {
+        id: "ajazz-aj139",
+        name: "AJAZZ AJ139 V2 MC",
+        type: "WebHID Gaming Mouse",
+        path: "devices/ajazz-aj139/index.html",
+        filters: [
+          { vendorId: 0xA8A4, productId: 0x2255, usagePage: 0xFF01, usage: 0x10 },
+          { vendorId: 0xA8A5, productId: 0x2255, usagePage: 0xFF01, usage: 0x10 }
+        ]
+      },
+      {
+        id: "tozo-ht3",
+        name: "TOZO HT3 Headset",
+        type: "Bluetooth Audio & Hybrid ANC",
+        path: "devices/tozo-ht3/index.html",
+        filters: [
+          { namePrefix: "TOZO HT3" },
+          { namePrefix: "TOZO" }
+        ]
+      }
+    ];
+
+    async function checkPairedDevices() {
+      const grid = document.getElementById("devices-grid");
+      grid.innerHTML = "";
+      const detectedDeviceIds = new Set();
+
+      if (navigator.hid) {
+        const paired = await navigator.hid.getDevices();
+        paired.forEach(dev => {
+          const match = REGISTRY.find(r => 
+            r.filters && r.filters.some(f => 
+              f.vendorId === dev.vendorId && f.productId === dev.productId
+            )
+          );
+
+          if (match && !detectedDeviceIds.has(match.id)) {
+            detectedDeviceIds.add(match.id);
+            grid.innerHTML += `
+              <div class="device-card active" onclick="location.href='${match.path}'">
+                <div class="card-status">ONLINE (HID)</div>
+                <div class="card-name font-impact">${match.name}</div>
+                <div class="card-desc">${match.type}</div>
+                <button class="btn-primary font-impact">OPEN STUDIO</button>
+              </div>
+            `;
+          }
+        });
+      }
+
+      if (detectedDeviceIds.size === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="font-impact" style="font-size: 16px; color: #8b978f;">NO DEVICES CURRENTLY ACTIVE</div>
+            <div style="font-size: 12px; color: #535e6d; margin-top: 6px;">Click the button above to pair your peripheral.</div>
+          </div>
+        `;
+      }
+    }
+
+    document.getElementById("btn-scan").addEventListener("click", async () => {
+      const allFilters = [];
+      REGISTRY.forEach(r => {
+        if (r.filters) {
+          r.filters.forEach(f => {
+            const filterObj = {};
+            if (f.vendorId !== undefined) filterObj.vendorId = f.vendorId;
+            if (f.productId !== undefined) filterObj.productId = f.productId;
+            if (f.usagePage !== undefined) filterObj.usagePage = f.usagePage;
+            if (f.usage !== undefined) filterObj.usage = f.usage;
+            if (Object.keys(filterObj).length > 0) {
+              allFilters.push(filterObj);
+            }
+          });
+        }
+      });
+
+      try {
+        const devs = await navigator.hid.requestDevice({ filters: allFilters });
+        if (devs && devs.length > 0) {
+          if (!devs[0].opened) await devs[0].open();
+          await checkPairedDevices();
+        }
+      } catch (e) {
+        console.warn("Scan cancelled or failed", e);
+      }
+    });
+
+    window.addEventListener("DOMContentLoaded", checkPairedDevices);
+    if (navigator.hid) {
+      navigator.hid.onconnect = checkPairedDevices;
+      navigator.hid.ondisconnect = checkPairedDevices;
+    }
+  </script>
+</body>
+</html>

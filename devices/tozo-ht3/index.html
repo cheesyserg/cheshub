@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChesHub | TOZO HT3 Studio</title>
+  <link rel="stylesheet" href="../ajazz-aj139/style.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Left Sidebar HUD -->
+  <aside id="sidebar">
+    <div class="sidebar-brand font-impact" onclick="location.href='../../index.html'" style="cursor:pointer;" title="Back to Hub">
+      ← CHES<span style="color:var(--riot-red);">HUB</span>
+    </div>
+    
+    <div class="sidebar-footer">
+      <div class="hud-card">
+        <div class="hud-row">
+          <span style="color: var(--riot-muted); font-weight: 700;">HARDWARE STATUS</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <div class="status-dot" id="hud-dot"></div>
+            <span id="hud-status" style="font-weight:700;">STANDBY</span>
+          </div>
+        </div>
+        
+        <div class="hud-row" style="margin-top: 6px;">
+          <span style="color: var(--riot-muted); font-weight: 700;">BATTERY LEVEL</span>
+          <span id="hud-battery-text" style="font-weight: 700;">--%</span>
+        </div>
+        <div class="battery-track"><div class="battery-fill" id="hud-battery-bar"></div></div>
+
+        <div class="hud-row" style="margin-top: 6px;">
+          <span style="color: var(--riot-muted); font-weight: 700;">LINK MODE</span>
+          <span id="hud-mode" style="font-weight: 700; color: var(--riot-gray);">BLUETOOTH LE</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Viewport -->
+  <div id="main-content">
+    <header class="top-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="device-title font-impact">TOZO HT3 HYBRID ANC</span>
+        <span class="fw-tag" id="header-fw">FW: BLE-GATT</span>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <button class="btn-ghost font-impact" id="btn-sync">SYNC</button>
+        <button class="btn-primary font-impact" id="btn-connect">CONNECT VIA BLUETOOTH</button>
+      </div>
+    </header>
+
+    <div class="scroll-area">
+      <div class="studio-layout">
+        
+        <div class="panels-col">
+          <!-- ANC Profile Selector -->
+          <div class="panel-section">
+            <div class="section-title font-impact">NOISE CANCELLATION ENGINE</div>
+            <div class="section-desc">Select dynamic sound dampening modes</div>
+            <div class="segmented" id="anc-controls">
+              <button class="seg-btn active" onclick="setAncMode('ANC')">ACTIVE ANC</button>
+              <button class="seg-btn" onclick="setAncMode('TRANSPARENT')">TRANSPARENCY</button>
+              <button class="seg-btn" onclick="setAncMode('OFF')">NORMAL (OFF)</button>
+            </div>
+          </div>
+
+          <!-- DSP Equalizer -->
+          <div class="panel-section">
+            <div class="section-title font-impact">HARDWARE DSP EQUALIZER</div>
+            <div class="section-desc">Onboard sound signature tuning</div>
+            <div class="segmented" id="eq-controls">
+              <button class="seg-btn active">BASS BOOST+</button>
+              <button class="seg-btn">BALANCED</button>
+              <button class="seg-btn">VOCAL CLARITY</button>
+              <button class="seg-btn">ESPORTS / FPS</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script type="module" src="driver.js"></script>
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChesHub | AJAZZ AJ139 Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Master Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-brand font-impact" onclick="location.href='../../index.html'" style="cursor:pointer;" title="Back to Hub">
+      ← CHES<span style="color:var(--riot-red);">HUB</span>
+    </div>
+    
+    <div class="nav-menu">
+      <div class="nav-section-title">ECOSYSTEM</div>
+      <div class="nav-item font-impact" onclick="location.href='../../index.html'">DEVICES LIBRARY</div>
+      
+      <div class="nav-section-title">ACTIVE HARDWARE</div>
+      <div class="nav-item active font-impact" id="nav-tab-rgb" onclick="switchTab('tab-rgb')">LIGHTING STUDIO</div>
+      <div class="nav-item font-impact" id="nav-tab-dpi" onclick="switchTab('tab-dpi')">PERFORMANCE</div>
+      <div class="nav-item font-impact" id="nav-tab-sensor" onclick="switchTab('tab-sensor')">ENGINE / SENSOR</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="hud-card">
+        <div class="hud-row">
+          <span style="color: var(--riot-muted); font-weight: 700;">HARDWARE STATUS</span>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <div class="status-dot" id="hud-dot"></div>
+            <span id="hud-status" style="font-weight:700;">STANDBY</span>
+          </div>
+        </div>
+        
+        <div class="hud-row" style="margin-top: 6px;">
+          <span style="color: var(--riot-muted); font-weight: 700;">BATTERY LEVEL</span>
+          <span id="hud-battery-text" style="font-weight: 700;">--%</span>
+        </div>
+        <div class="battery-track"><div class="battery-fill" id="hud-battery-bar"></div></div>
+
+        <div class="hud-row" style="margin-top: 6px;">
+          <span style="color: var(--riot-muted); font-weight: 700;">LINK MODE</span>
+          <span id="hud-mode" style="font-weight: 700; color: var(--riot-gray);">NONE</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Studio Viewport -->
+  <div id="main-content">
+    <header class="top-header">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span class="device-title font-impact">AJAZZ AJ139 V2 MC</span>
+        <span class="fw-tag" id="header-fw">FW: --</span>
+      </div>
+      <div style="display:flex; gap:12px;">
+        <button class="btn-ghost font-impact" id="btn-sync">SYNC</button>
+        <button class="btn-primary font-impact" id="btn-connect">APPLY ALL</button>
+      </div>
+    </header>
+
+    <div class="scroll-area">
+      <div class="studio-layout">
+        
+        <!-- Interactive Stage -->
+        <div class="visualizer-col">
+          <div class="mouse-stage">
+            <div class="side-diffuser left glow-off" id="glow-left"></div>
+            <div class="side-diffuser right glow-off" id="glow-right"></div>
+            <div class="dpi-slit-led" id="live-dpi-led"></div>
+            <img id="mouse-img" src="black.png" class="mouse-img">
+
+            <svg class="stage-svg" viewBox="0 0 460 460">
+              <polyline points="60,98 150,98 180,120" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+              <polyline points="60,182 122,182 132,190" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+              <polyline points="60,250 128,250 138,242" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+              <polyline points="390,98 310,98 280,120" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+              <polyline points="395,158 285,158 230,115" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+              <polyline points="395,220 285,220 230,180" stroke="#ff4655" stroke-width="1.5" fill="none"/>
+            </svg>
+
+            <div class="btn-anchor" id="anchor-0"><span class="btn-anchor-label">1. Left Click</span><select id="btn-select-0"></select></div>
+            <div class="btn-anchor" id="anchor-4"><span class="btn-anchor-label">5. Forward</span><select id="btn-select-4"></select></div>
+            <div class="btn-anchor" id="anchor-3"><span class="btn-anchor-label">4. Backward</span><select id="btn-select-3"></select></div>
+            <div class="btn-anchor" id="anchor-1"><span class="btn-anchor-label">2. Right Click</span><select id="btn-select-1"></select></div>
+            <div class="btn-anchor" id="anchor-2"><span class="btn-anchor-label">3. Middle Click</span><select id="btn-select-2"></select></div>
+            <div class="btn-anchor" id="anchor-5"><span class="btn-anchor-label">6. DPI Loop</span><select id="btn-select-5"></select></div>
+          </div>
+        </div>
+
+        <!-- Configuration Panels Container -->
+        <div class="panels-col">
+          
+          <!-- RGB Tab -->
+          <div class="tab-panel active" id="tab-rgb">
+            <div class="panel-section">
+              <div class="section-title font-impact">STREAMER MODES</div>
+              <div class="section-desc">Select an animation pattern to test live</div>
+              <div class="rgb-grid" id="lighting-grid"></div>
+            </div>
+          </div>
+
+          <!-- Performance Tab -->
+          <div class="tab-panel" id="tab-dpi">
+            <div class="panel-section">
+              <div class="section-title font-impact">REPORT RATE</div>
+              <div class="section-desc">USB / 2.4G wireless reporting frequency.</div>
+              <div class="segmented" id="poll-control">
+                <button class="seg-btn" onclick="setPolling(125)">125 HZ</button>
+                <button class="seg-btn" onclick="setPolling(250)">250 HZ</button>
+                <button class="seg-btn" onclick="setPolling(500)">500 HZ</button>
+                <button class="seg-btn active" onclick="setPolling(1000)">1000 HZ</button>
+              </div>
+
+              <div class="section-title font-impact" style="margin-top:24px;">DPI STAGES</div>
+              <div class="section-desc">Assign sensitivity curves and live LED indicator colors.</div>
+              <div id="dpi-stage-rows"></div>
+            </div>
+          </div>
+
+          <!-- Sensor Tab -->
+          <div class="tab-panel" id="tab-sensor">
+            <div class="panel-section">
+              <div class="section-title font-impact">OPTICAL ENGINE & SENSOR</div>
+              <div class="section-desc">Configure PAW sensor registers, sleep triggers, and tracking algorithms.</div>
+
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Motion Sync</div><div class="form-hint">Synchronize optical reads with USB polls.</div></div>
+                <label class="toggle"><input type="checkbox" id="chk-motion-sync" checked><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Ripple Control</div><div class="form-hint">Trajectory smoothing for high DPI.</div></div>
+                <label class="toggle"><input type="checkbox" id="chk-ripple"><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Angle Snapping</div></div>
+                <label class="toggle"><input type="checkbox" id="chk-linesnap"><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Esports Tracking Mode</div></div>
+                <label class="toggle"><input type="checkbox" id="chk-esports"><span class="slider"></span></label>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Lift-Off Distance (LOD)</div></div>
+                <div class="segmented" id="lod-control">
+                  <button class="seg-btn active" onclick="setLOD(1)">1 MM</button>
+                  <button class="seg-btn" onclick="setLOD(2)">2 MM</button>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Debounce Response</div></div>
+                <div class="slider-wrap">
+                  <input type="range" id="rng-debounce" min="0" max="20" value="8" oninput="document.getElementById('lbl-debounce').innerText = this.value + ' ms'">
+                  <span class="val-badge" id="lbl-debounce">8 ms</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Sleep Timeout</div></div>
+                <div class="slider-wrap">
+                  <input type="range" id="rng-sleep" min="0" max="60" value="10" oninput="document.getElementById('lbl-sleep').innerText = this.value === '0' ? 'Never' : this.value + ' min'">
+                  <span class="val-badge" id="lbl-sleep">10 min</span>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-info"><div class="form-label">Invert Scroll Wheel</div></div>
+                <label class="toggle"><input type="checkbox" id="chk-invert-scroll"><span class="slider"></span></label>
+              </div>
+              
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="driver.js"></script>
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add("active");
+
+      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      const nav = document.getElementById(`nav-${tabId}`);
+      if (nav) nav.classList.add("active");
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      const connectBtn = document.getElementById("btn-connect");
+      if (connectBtn) {
+        connectBtn.onclick = () => {
+          if (typeof connectOrApply === "function") connectOrApply();
+        };
+      }
+
+      const syncBtn = document.getElementById("btn-sync");
+      if (syncBtn) {
+        syncBtn.onclick = () => {
+          if (typeof syncHardwareState === "function") syncHardwareState();
+        };
+      }
+    });
+  </script>
+</body>
+</html>

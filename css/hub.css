@@ -1,0 +1,36 @@
+:root {
+  --riot-dark: #0f1923;
+  --riot-darker: #090e14;
+  --riot-panel: #17202a;
+  --riot-red: #ff4655;
+  --riot-white: #ece8e1;
+  --riot-gray: #8b978f;
+  --riot-border: rgba(255, 255, 255, 0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--riot-darker); color: var(--riot-white); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; min-height: 100vh; display: flex; justify-content: center; }
+.font-impact { font-family: "Arial Black", Impact, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+
+.hub-container { width: 100%; max-width: 900px; padding: 60px 20px; display: flex; flex-direction: column; gap: 30px; }
+.hub-header .brand { font-size: 32px; }
+.hub-header .brand span { color: var(--riot-red); }
+.hub-header .subtitle { color: var(--riot-gray); font-size: 14px; margin-top: 4px; }
+
+.btn-primary {
+  background: var(--riot-red); color: #fff; border: none; padding: 12px 24px;
+  font-size: 13px; cursor: pointer; transition: 0.2s; box-shadow: 0 0 15px rgba(255, 70, 85, 0.25);
+}
+.btn-primary:hover { background: #ff5866; }
+
+.devices-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; }
+.device-card {
+  background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 24px;
+  border-radius: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 10px; transition: 0.2s;
+}
+.device-card:hover { border-color: var(--riot-red); transform: translateY(-2px); }
+.card-status { font-size: 10px; font-weight: 800; color: #00ff55; }
+.card-name { font-size: 16px; }
+.card-desc { font-size: 12px; color: var(--riot-gray); margin-bottom: 12px; }
+
+.empty-state { grid-column: 1 / -1; padding: 60px 20px; border: 1px dashed var(--riot-border); text-align: center; }
