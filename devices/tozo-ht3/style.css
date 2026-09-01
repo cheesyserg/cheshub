@@ -1,11 +1,95 @@
-#anc-controls, #eq-controls {
-  display: flex;
-  width: 100%;
-  max-width: 500px;
+:root {
+  --riot-dark: #0f1923;
+  --riot-darker: #090e14;
+  --riot-panel: #17202a;
+  --riot-red: #ff4655;
+  --riot-white: #ece8e1;
+  --riot-gray: #8b978f;
+  --riot-muted: #535e6d;
+  --riot-border: rgba(255, 255, 255, 0.08);
 }
 
-#anc-controls .seg-btn, #eq-controls .seg-btn {
-  flex: 1;
-  text-align: center;
-  padding: 10px 14px;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--riot-darker); color: var(--riot-white); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; overflow: hidden; }
+.font-impact { font-family: "Arial Black", Impact, sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+
+#sidebar { width: 260px; background: var(--riot-dark); border-right: 1px solid var(--riot-border); display: flex; flex-direction: column; justify-content: space-between; z-index: 100; }
+.sidebar-brand { padding: 26px 24px; font-size: 20px; border-bottom: 1px solid var(--riot-border); cursor: pointer; }
+.nav-section-title { font-size: 10px; font-weight: 800; color: var(--riot-muted); letter-spacing: 1.5px; padding: 20px 24px 8px; }
+.nav-menu { flex: 1; overflow-y: auto; }
+.nav-item { padding: 14px 24px; font-size: 13px; font-weight: 700; color: var(--riot-gray); cursor: pointer; border-left: 4px solid transparent; transition: 0.2s; }
+.nav-item:hover { color: var(--riot-white); background: rgba(255, 255, 255, 0.03); }
+.nav-item.active { color: var(--riot-white); background: rgba(255, 255, 255, 0.05); border-left-color: var(--riot-red); }
+
+.sidebar-footer { padding: 20px; border-top: 1px solid var(--riot-border); background: rgba(0,0,0,0.2); }
+.hud-card { background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 16px; border-radius: 8px; display: flex; flex-direction: column; gap: 10px; font-size: 11px; }
+.hud-row { display: flex; justify-content: space-between; align-items: center; }
+.battery-track { width: 100%; height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.battery-fill { height: 100%; width: 0%; background: #00ff55; transition: width 0.3s ease; }
+
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+#main-content { flex: 1; display: flex; flex-direction: column; height: 100vh; background: radial-gradient(circle at 85% 15%, #182330 0%, var(--riot-darker) 65%); overflow: hidden; }
+.top-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 36px; border-bottom: 1px solid var(--riot-border); background: rgba(15, 25, 35, 0.7); backdrop-filter: blur(12px); }
+.device-title { font-size: 20px; }
+.fw-tag { background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 3px 8px; font-size: 11px; color: var(--riot-gray); font-weight: 700; }
+.btn-primary { background: var(--riot-red); color: #fff; border: none; padding: 9px 20px; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 0 15px rgba(255, 70, 85, 0.25); }
+
+select {
+  background: var(--riot-panel);
+  border: 1px solid var(--riot-border);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
 }
+
+select:focus {
+  outline: none;
+  border-color: var(--riot-red);
+}
+
+/* Mode control layout */
+.row { display: flex; align-items: center; gap: 12px; }
+.mode-control { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; cursor: pointer; }
+.mode-control input[type="checkbox"] { width: 14px; height: 14px; accent-color: var(--riot-red); cursor: pointer; }
+.btn-ghost { background: transparent; color: #fff; border: 1px solid var(--riot-border); padding: 8px 16px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+.scroll-area { flex: 1; padding: 30px 40px; overflow-y: auto; width: 100%; }
+.studio-layout { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1560px; margin: 0 auto; }
+
+.panel-section { background: var(--riot-dark); border: 1px solid var(--riot-border); padding: 24px; border-radius: 6px; }
+.section-title { font-size: 17px; margin-bottom: 4px; }
+.section-desc { font-size: 12px; color: var(--riot-gray); margin-bottom: 20px; }
+
+.segmented { display: inline-flex; background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 3px; gap: 4px; border-radius: 4px; }
+.seg-btn { background: transparent; border: none; color: var(--riot-gray); padding: 7px 14px; font-size: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+.seg-btn.active { background: var(--riot-dark); color: #fff; border: 1px solid var(--riot-border); }
+
+/* EQ Slider Styles */
+.sliders { display: flex; justify-content: space-between; margin-top: 15px; }
+.slider-col { display: flex; flex-direction: column; align-items: center; gap: 8px; font-size: 11px; }
+.slider-col input[type=range] { writing-mode: vertical-lr; direction: rtl; width: 20px; height: 140px; margin: 0; accent-color: var(--riot-red); }
+.slider-col span { width: 45px; text-align: center; font-size: 10px; color: var(--riot-gray); }
+.slider-freq { font-weight: 700; font-size: 10px; color: var(--riot-white); }
+.slider-val { font-family: monospace; font-size: 11px; color: var(--riot-red); font-weight: bold; }
+
+#btnAddPreset, #btnSavePreset, #btnDelPreset {
+  background: var(--riot-panel);
+  border: 1px solid var(--riot-border);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: 0.2s;
+}
+#btnAddPreset:hover { background: var(--riot-dark); border-color: var(--riot-gray); }
+#btnSavePreset:hover { background: var(--riot-dark); border-color: var(--riot-gray); }
+#btnDelPreset:hover { background: var(--riot-dark); border-color: var(--riot-red); }
+#btnSavePreset:disabled, #btnDelPreset:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#toast-container { position: fixed; bottom: 26px; right: 36px; z-index: 1000; }
+.toast { background: var(--riot-panel); border-left: 4px solid var(--riot-red); color: #fff; padding: 14px 18px; font-size: 13px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.6); }

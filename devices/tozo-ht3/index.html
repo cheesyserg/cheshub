@@ -3,42 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <title>ChesHub | TOZO HT3 Studio</title>
-  <link rel="stylesheet" href="../ajazz-aj139/style.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Left Sidebar HUD -->
   <aside id="sidebar">
     <div class="sidebar-brand font-impact" onclick="location.href='../../index.html'" style="cursor:pointer;" title="Back to Hub">
       ← CHES<span style="color:var(--riot-red);">HUB</span>
     </div>
-    
+    <div class="nav-menu">
+      <div class="nav-section-title">ECOSYSTEM</div>
+      <div class="nav-item font-impact" onclick="location.href='../../index.html'">DEVICES LIBRARY</div>
+      <div class="nav-section-title">ACTIVE HARDWARE</div>
+      <div class="nav-item active font-impact">AUDIO ENGINE</div>
+    </div>
     <div class="sidebar-footer">
       <div class="hud-card">
-        <div class="hud-row">
-          <span style="color: var(--riot-muted); font-weight: 700;">HARDWARE STATUS</span>
-          <div style="display:flex; align-items:center; gap:6px;">
-            <div class="status-dot" id="hud-dot"></div>
-            <span id="hud-status" style="font-weight:700;">STANDBY</span>
-          </div>
-        </div>
-        
-        <div class="hud-row" style="margin-top: 6px;">
-          <span style="color: var(--riot-muted); font-weight: 700;">BATTERY LEVEL</span>
-          <span id="hud-battery-text" style="font-weight: 700;">--%</span>
-        </div>
+        <div class="hud-row"><span style="color: var(--riot-muted); font-weight: 700;">HARDWARE STATUS</span><div style="display:flex; align-items:center; gap:6px;"><div class="status-dot" id="hud-dot"></div><span id="hud-status" style="font-weight:700;">STANDBY</span></div></div>
+        <div class="hud-row" style="margin-top: 6px;"><span style="color: var(--riot-muted); font-weight: 700;">BATTERY LEVEL</span><span id="hud-battery-text" style="font-weight: 700;">--%</span></div>
         <div class="battery-track"><div class="battery-fill" id="hud-battery-bar"></div></div>
-
-        <div class="hud-row" style="margin-top: 6px;">
-          <span style="color: var(--riot-muted); font-weight: 700;">LINK MODE</span>
-          <span id="hud-mode" style="font-weight: 700; color: var(--riot-gray);">BLUETOOTH LE</span>
-        </div>
+        <div class="hud-row" style="margin-top: 6px;"><span style="color: var(--riot-muted); font-weight: 700;">LINK MODE</span><span id="hud-mode" style="font-weight: 700; color: var(--riot-gray);">BLUETOOTH LE</span></div>
       </div>
     </div>
   </aside>
 
-  <!-- Main Viewport -->
   <div id="main-content">
     <header class="top-header">
       <div style="display:flex; align-items:center; gap:12px;">
@@ -53,37 +41,63 @@
 
     <div class="scroll-area">
       <div class="studio-layout">
-        
         <div class="panels-col">
+
+          <!-- Connection Status -->
+          <div class="panel-section" style="display:flex; align-items:center; gap:12px; justify-content:space-between;">
+            <div>
+              <span style="font-weight:700; font-size:13px;">DEVICE CONNECTION</span>
+              <span id="statusLbl" style="font-size:12px; color:var(--riot-gray); margin-left:8px;">Status: Disconnected.</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <!--<span id="batteryLbl" style="font-weight:700; font-size:12px; color:#00ff55;">Battery: --%</span>-->
+            </div>
+          </div>
+
           <!-- ANC Profile Selector -->
-          <div class="panel-section">
+          <div class="panel-section" id="modesCard">
             <div class="section-title font-impact">NOISE CANCELLATION ENGINE</div>
             <div class="section-desc">Select dynamic sound dampening modes</div>
-            <div class="segmented" id="anc-controls">
-              <button class="seg-btn active" onclick="setAncMode('ANC')">ACTIVE ANC</button>
-              <button class="seg-btn" onclick="setAncMode('TRANSPARENT')">TRANSPARENCY</button>
-              <button class="seg-btn" onclick="setAncMode('OFF')">NORMAL (OFF)</button>
+            <div class="row" style="gap: 8px; flex-wrap: wrap;">
+              <select id="ancSelect" style="flex: 1; min-width: 160px;">
+                <option value="0">Normal Mode</option>
+                <option value="1">Noise Cancelling</option>
+                <option value="2">Transparency</option>
+                <option value="3">Reduce Wind Noise</option>
+                <option value="4">Leisure Mode</option>
+                <option value="5">Adaptive Mode</option>
+              </select>
+              <label class="mode-control"><input type="checkbox" id="rememberChk" checked> Remember Mode</label>
+              <label class="mode-control"><input type="checkbox" id="spatialChk"> Spatial Audio</label>
+              <label class="mode-control"><input type="checkbox" id="latencyChk"> Low Latency</label>
             </div>
           </div>
 
-          <!-- DSP Equalizer -->
-          <div class="panel-section">
+          <!-- Hardware DSP Equalizer -->
+          <div class="panel-section" id="eqCard">
             <div class="section-title font-impact">HARDWARE DSP EQUALIZER</div>
-            <div class="section-desc">Onboard sound signature tuning</div>
-            <div class="segmented" id="eq-controls">
-              <button class="seg-btn active">BASS BOOST+</button>
-              <button class="seg-btn">BALANCED</button>
-              <button class="seg-btn">VOCAL CLARITY</button>
-              <button class="seg-btn">ESPORTS / FPS</button>
+            <div class="section-desc">Onboard sound signature tuning — 10-band vertical EQ</div>
+            <div class="row" style="margin-bottom: 12px;">
+              <label for="presetSelect">Preset:</label>
+              <select id="presetSelect" style="flex: 1;"></select>
+              <button id="btnAddPreset">Add</button>
+              <button id="btnSavePreset" disabled>Save</button>
+              <button id="btnDelPreset" disabled>Delete</button>
             </div>
+            <div class="sliders" id="slidersContainer"></div>
           </div>
-        </div>
 
+          <!-- Footer Actions -->
+          <div class="panel-section" style="display:flex; align-items:center; gap:12px; justify-content:flex-end;">
+            <button class="btn-ghost font-impact" id="btnReset">RESET FLAT</button>
+            <button class="btn-primary font-impact" id="btnCommit">COMMIT TO DEVICE</button>
+          </div>
+
+        </div>
       </div>
     </div>
   </div>
 
-  <div id="toast-container"></div>
   <script type="module" src="driver.js"></script>
 </body>
 </html>

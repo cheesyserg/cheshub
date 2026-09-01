@@ -51,6 +51,7 @@
       grid.innerHTML = "";
       const detectedDeviceIds = new Set();
 
+      // Check HID devices
       if (navigator.hid) {
         const paired = await navigator.hid.getDevices();
         paired.forEach(dev => {
@@ -74,6 +75,27 @@
         });
       }
 
+      // Check Serial devices (for TOZO)
+      if (navigator.serial) {
+        try {
+          const ports = await navigator.serial.getPorts();
+          if (ports.length > 0 && !detectedDeviceIds.has("tozo-ht3")) {
+            detectedDeviceIds.add("tozo-ht3");
+            grid.innerHTML += `
+              <div class="device-card active" onclick="location.href='devices/tozo-ht3/index.html'">
+                <div class="card-status">ONLINE (SERIAL)</div>
+                <div class="card-name font-impact">TOZO HT3 Headset</div>
+                <div class="card-desc">Bluetooth Audio & Hybrid ANC</div>
+                <button class="btn-primary font-impact">OPEN STUDIO</button>
+              </div>
+            `;
+          }
+        } catch (err) {
+          console.warn("Could not get serial ports:", err);
+        }
+      }
+
+      // Show empty state if no devices detected
       if (detectedDeviceIds.size === 0) {
         grid.innerHTML = `
           <div class="empty-state">
@@ -85,37 +107,137 @@
     }
 
     document.getElementById("btn-scan").addEventListener("click", async () => {
-      const allFilters = [];
-      REGISTRY.forEach(r => {
-        if (r.filters) {
-          r.filters.forEach(f => {
-            const filterObj = {};
-            if (f.vendorId !== undefined) filterObj.vendorId = f.vendorId;
-            if (f.productId !== undefined) filterObj.productId = f.productId;
-            if (f.usagePage !== undefined) filterObj.usagePage = f.usagePage;
-            if (f.usage !== undefined) filterObj.usage = f.usage;
-            if (Object.keys(filterObj).length > 0) {
-              allFilters.push(filterObj);
-            }
-          });
-        }
-      });
+      // Show protocol selection popup
+      const choice = await showProtocolSelection();
+      
+      if (choice === "hid") {
+        await pairViaHID();
+      } else if (choice === "serial") {
+        await pairViaSerial();
+      }
+    });
 
+    async function showProtocolSelection() {
+      return new Promise((resolve) => {
+        // Create popup overlay
+        const overlay = document.createElement("div");
+        overlay.style.position = "fixed";
+        overlay.style.top = "0";
+        overlay.style.left = "0";
+        overlay.style.width = "100%";
+        overlay.style.height = "100%";
+        overlay.style.background = "rgba(0,0,0,0.5)";
+        overlay.style.display = "flex";
+        overlay.style.alignItems = "center";
+        overlay.style.justifyContent = "center";
+        overlay.style.zIndex = "1000";
+        
+        // Create popup content
+        const popup = document.createElement("div");
+        popup.style.background = "var(--riot-panel)";
+        popup.style.border = "1px solid var(--riot-border)";
+        popup.style.borderRadius = "6px";
+        popup.style.padding = "24px";
+        popup.style.width = "300px";
+        popup.style.textAlign = "center";
+        
+        popup.innerHTML = `
+          <h3 style="color: var(--riot-white); margin-bottom: 16px;">Select Connection Type</h3>
+          <div style="margin-bottom: 12px;">
+            <button id="btn-hid" class="btn-primary font-impact" style="width: 100%; margin-bottom: 8px;">WebHID</button>
+          </div>
+          <div>
+            <button id="btn-serial" class="btn-primary font-impact" style="width: 100%;">Serial (RFCOMM)</button>
+          </div>
+        `;
+        
+        overlay.appendChild(popup);
+        document.body.appendChild(overlay);
+        
+        // Handle button clicks
+        const cleanup = () => {
+          document.removeEventListener("keydown", onKeyDown);
+        };
+        
+        const onKeyDown = (e) => {
+          if (e.key === "Escape") {
+            overlay.remove();
+            cleanup();
+            resolve(null);
+          }
+        };
+        
+        document.getElementById("btn-hid").onclick = () => {
+          cleanup();
+          overlay.remove();
+          resolve("hid");
+        };
+        
+        document.getElementById("btn-serial").onclick = () => {
+          cleanup();
+          overlay.remove();
+          resolve("serial");
+        };
+        
+        document.addEventListener("keydown", onKeyDown);
+      });
+    }
+
+    async function pairViaHID() {
       try {
+        // Build HID filters from registry (only valid HID properties)
+        const allFilters = [];
+        REGISTRY.forEach(r => {
+          if (r.filters) {
+            r.filters.forEach(f => {
+              const filterObj = {};
+              if (f.vendorId !== undefined) filterObj.vendorId = f.vendorId;
+              if (f.productId !== undefined) filterObj.productId = f.productId;
+              if (f.usagePage !== undefined) filterObj.usagePage = f.usagePage;
+              if (f.usage !== undefined) filterObj.usage = f.usage;
+              if (Object.keys(filterObj).length > 0) {
+                allFilters.push(filterObj);
+              }
+            });
+          }
+        });
+
         const devs = await navigator.hid.requestDevice({ filters: allFilters });
         if (devs && devs.length > 0) {
           if (!devs[0].opened) await devs[0].open();
           await checkPairedDevices();
         }
       } catch (e) {
-        console.warn("Scan cancelled or failed", e);
+        console.warn("HID pairing failed", e);
+        alert("HID pairing failed or was cancelled");
       }
-    });
+    }
+
+    async function pairViaSerial() {
+      if (!navigator.serial) {
+        alert("Serial API not available in this browser");
+        return;
+      }
+      
+      try {
+        const port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+        await checkPairedDevices();
+      } catch (err) {
+        console.warn("Serial pairing failed", err);
+        alert("Serial pairing failed or was cancelled");
+      }
+    }
 
     window.addEventListener("DOMContentLoaded", checkPairedDevices);
     if (navigator.hid) {
       navigator.hid.onconnect = checkPairedDevices;
       navigator.hid.ondisconnect = checkPairedDevices;
+    }
+    // Also check for serial device changes
+    if (navigator.serial) {
+      navigator.serial.onconnect = checkPairedDevices;
+      navigator.serial.ondisconnect = checkPairedDevices;
     }
   </script>
 </body>
