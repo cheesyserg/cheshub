@@ -30,7 +30,7 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Six DPI stages (50–24000), click-to-activate, selectable stage count and
   per-stage indicator colour
 - Report rate 125 / 250 / 500 / 1000 Hz
-- Sleep timeout and move wake-up
+- Sleep timeout (1, 2, 5, 6, 10, 15, 20, 30 min) and move wake-up
 - Macro recorder with keyboard/modifier events (up to six), per-key upload and
   once / repeat / toggle playback
 - Named profile slots, factory restore

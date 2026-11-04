@@ -70,6 +70,17 @@ const CMD = {
 
 const RATE_CODES = { 1000: 1, 500: 2, 250: 4, 125: 8 };
 
+/* Sleep timeout options from the vendor UI, in minutes. The firmware stores
+   minutes * 6: 1 min -> 0x06, 30 min -> 0xB4 (180), confirmed from captures. */
+const SLEEP_OPTIONS = [1, 2, 5, 6, 10, 15, 20, 30];
+const SLEEP_UNIT = 6;
+
+function nearestSleep(minutes) {
+  return SLEEP_OPTIONS.reduce((best, option) =>
+    Math.abs(option - minutes) < Math.abs(best - minutes) ? option : best,
+    SLEEP_OPTIONS[0]);
+}
+
 /* DPI is not sent as a raw value. GetMouseDPIValue @ 0x1D740 compresses it:
  *
  *   dpi <= 10000         -> dpi / 50
@@ -209,7 +220,8 @@ const DEFAULTS = {
   rate: 1000,         // report_rate default_value="1" == 1000 Hz (code 1)
   dpiCount: 6,        // dpi_count: low nibble of 0x03 payload[0]
   dpiIndex: 1,        // default_dpi="2" is 1-based -> index 1
-  sleep: 180,         // sleep_light value="180"
+  sleep: 30,          // minutes; wire code is minutes * 6 (XML sleep_light="180")
+  sleepVersion: 2,    // state migration marker for the sleep codec
   moveWake: false,    // move_wakeup value="0"
   keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"],
   keyRecords: null    // raw 3-byte 0x09 records, filled by readKeys()
@@ -505,8 +517,11 @@ async function readKeys() {
 async function readPower() {
   const res = await sendCommand(CMD.POWER_READ, [], 0, { isWrite: false });
   if (!res.reply || res.reply.length < 8) return false;
-  const sleep = res.reply[4];
-  if (sleep > 0) state.sleep = sleep;
+  const wire = res.reply[4];
+  if (wire > 0) {
+    const minutes = wire / SLEEP_UNIT;
+    state.sleep = SLEEP_OPTIONS.includes(minutes) ? minutes : Math.round(minutes * 10) / 10;
+  }
   state.moveWake = res.reply[6] === 1;
   return true;
 }
@@ -580,8 +595,8 @@ async function applyDpiColors() {
 /* move_closelight has no UI on this model (custom show_* = 0), so it is
    always written at the vendor default of 0. */
 async function applyPower() {
-  return sendCommand(CMD.POWER,
-                     [state.sleep, 0, state.moveWake ? 1 : 0, 0], 4);
+  const wire = Math.max(1, Math.min(255, Math.round(state.sleep * SLEEP_UNIT)));
+  return sendCommand(CMD.POWER, [wire, 0, state.moveWake ? 1 : 0, 0], 4);
 }
 
 /* Command 0x09 carries all six bindings as 3-byte records, ordered by
@@ -1152,6 +1167,11 @@ function buildProfiles() {
       const saved = profilesNow[btn.dataset.load];
       if (!saved) return;
       state = Object.assign(structuredClone(DEFAULTS), saved.state);
+      if (!saved.state || saved.state.sleepVersion !== 2) {
+        const legacy = Number(saved.state && saved.state.sleep);
+        state.sleep = Number.isFinite(legacy) ? nearestSleep(legacy / SLEEP_UNIT) : 30;
+      }
+      state.sleepVersion = 2;
       normalizeKeyRecords();
       if (saved.macro) {
         if (Array.isArray(saved.macro.steps)) macroSteps = saved.macro.steps;
@@ -1205,7 +1225,17 @@ function refreshUI() {
   });
 
   const sleep = $("sel-sleep");
-  if (sleep) sleep.value = String(state.sleep);
+  if (sleep) {
+    sleep.innerHTML = SLEEP_OPTIONS
+      .map((m) => `<option value="${m}">${m} min</option>`).join("");
+    if (!SLEEP_OPTIONS.includes(state.sleep)) {
+      const option = document.createElement("option");
+      option.value = String(state.sleep);
+      option.textContent = `${state.sleep} min`;
+      sleep.appendChild(option);
+    }
+    sleep.value = String(state.sleep);
+  }
   const wake = $("chk-wake");
   if (wake) wake.checked = state.moveWake;
 }
@@ -1254,8 +1284,18 @@ function normalizeKeyRecords() {
 function restoreState() {
   try {
     const raw = localStorage.getItem("tk-gm012.state");
-    if (raw) state = Object.assign(structuredClone(DEFAULTS), JSON.parse(raw));
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state = Object.assign(structuredClone(DEFAULTS), saved);
+      if (saved && saved.sleepVersion !== 2) {
+        // Older builds stored the firmware code directly (minutes * 6).
+        const legacy = Number(saved.sleep);
+        state.sleep = Number.isFinite(legacy) ? nearestSleep(legacy / SLEEP_UNIT) : 30;
+      }
+    }
   } catch (err) { /* ignore */ }
+  state.sleepVersion = 2;
+  if (!Number.isFinite(state.sleep) || state.sleep <= 0) state.sleep = 30;
   if (!Number.isInteger(state.dpiIndex) || state.dpiIndex < 0 || state.dpiIndex > 5) {
     state.dpiIndex = DEFAULT_STAGE;
   }
@@ -1652,15 +1692,17 @@ document.addEventListener("DOMContentLoaded", () => {
   $("sel-sleep")?.addEventListener("change", async (e) => {
     state.sleep = Number(e.target.value);
     saveState();
-    await applyPower();
+    const res = await applyPower();
     updateDiagnostics();
+    if (!res.ok) showToast(res.error || "Power write failed");
   });
 
   $("chk-wake")?.addEventListener("change", async (e) => {
     state.moveWake = e.target.checked;
     saveState();
-    await applyPower();
+    const res = await applyPower();
     updateDiagnostics();
+    if (!res.ok) showToast(res.error || "Power write failed");
   });
 
   $("btn-record")?.addEventListener("click", () => {

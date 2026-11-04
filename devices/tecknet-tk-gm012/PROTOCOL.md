@@ -233,7 +233,7 @@ is DPI Loop. The full action list in the language file runs 106-142 plus 160
 | `dpi_count` | `6` | six stages |
 | `report_rate default_value` | `1` | 1000 Hz (code 1) |
 | `report_max` | `4` | 125 / 250 / 500 / 1000 |
-| `sleep_light` | `180` | idle timeout, minutes |
+| `sleep_light` | `180` | 30 minutes (wire code is minutes × 6) |
 | `move_wakeup` | `0` | off |
 | `move_closelight` | `0` | not exposed in the UI |
 | `lod` | `1` | not exposed in the UI |
@@ -256,7 +256,7 @@ not implemented here.
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
-| `0x07` | Power management | `4` | 4 bytes at `[5..8]` | partially verified |
+| `0x07` | Power management | `4` | `[sleep_min*6][0][move_wake][close_light]` | verified |
 | `0x08` | Set one key / macro | `n*4+1` | `[5]=key_value`, then `n` x 4-byte records | disassembly, not yet on hardware |
 | `0x09` | Set all keys | `0x0f` | 6 x 3-byte records | verified |
 | `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
@@ -381,6 +381,15 @@ Four consecutive `_wtoi()` results from the config store. The shipped
 `move_closelight="0"`, which line up with bytes 5, 7 and 8; byte 6 is
 unlabelled.
 
+`sleep_light` is not minutes: the firmware stores **minutes × 6**. Captured 1 min
+as `0x06` and 30 min as `0xB4` (180). The vendor's eight options map as:
+
+| Minutes | 1 | 2 | 5 | 6 | 10 | 15 | 20 | 30 |
+|---|---|---|---|---|---|---|---|---|
+| Wire | `06` | `0C` | `1E` | `24` | `3C` | `5A` | `78` | `B4` |
+
+So the XML's default `sleep_light="180"` is 30 minutes, not 180 minutes.
+
 Only sleep and move wake-up have UI on this model. `move_closelight` is always
 written as `0`, its vendor default.
 
@@ -493,12 +502,12 @@ them, but the command is what selects a read:
 | `0x14` | `0x04` | 18 B | six RGB triples at `[4]` |
 | `0x15` | `0x05` | 24 B | lighting (unused on this model) |
 | `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |
-| `0x17` | `0x07` | 5 B | `[sleep][0][wake][closelight][0]` |
+| `0x17` | `0x07` | 5 B | `[sleep_min*6][0][wake][closelight][0]` |
 | `0x20` | — | 2 B | mouse firmware, see below |
 
 Two of these confirm earlier guesses. `0x17` returns `1e 00 01 00 00` —
-sleep 30, wake on, closelight off — matching the 4-byte write of `0x07`. And
-`0x13` decodes through the same table as the write path:
+sleep 5 min (`0x1E` = 30 / 6), wake on, closelight off — matching the 4-byte
+write of `0x07`. And `0x13` decodes through the same table as the write path:
 
 ```text
 13 00 01 19  00 | 16 00 16 00 | cc 00 cc 00 | 30 00 30 00 | 40 00 40 00 | 80 00 80 00 | dc 00 dc 00 | 00 00

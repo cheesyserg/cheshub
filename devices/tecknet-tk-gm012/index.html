@@ -221,12 +221,13 @@
                 </div>
                 <select id="sel-sleep" class="select-compact">
                   <option value="1">1 min</option>
+                  <option value="2">2 min</option>
                   <option value="5">5 min</option>
+                  <option value="6">6 min</option>
                   <option value="10">10 min</option>
                   <option value="15">15 min</option>
+                  <option value="20">20 min</option>
                   <option value="30">30 min</option>
-                  <option value="60">60 min</option>
-                  <option value="180">180 min</option>
                 </select>
               </div>
 
@@ -239,10 +240,12 @@
               </div>
 
               <p class="section-note">
-                Factory default is <code>sleep_light = 180</code> and
-                <code>move_wakeup = 0</code>. The mouse keeps an idle LED
-                cutoff of its own; this model exposes no control for it
-                (<code>move_closelight</code> stays at the vendor default).
+                The vendor exposes eight timeouts: 1, 2, 5, 6, 10, 15, 20 and
+                30 minutes. The firmware stores the timeout as
+                <code>minutes * 6</code>, so 1 min is <code>0x06</code> and the
+                factory default 30 min is <code>0xB4</code> (180). Moving the mouse
+                wakes it when <code>move_wakeup</code> is on; this model exposes no
+                control for <code>move_closelight</code>, so it stays at 0.
               </p>
             </div>
 
