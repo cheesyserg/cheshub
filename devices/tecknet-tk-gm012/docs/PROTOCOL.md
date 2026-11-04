@@ -258,7 +258,7 @@ not implemented here.
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
-| `0x07` | Power management | `4` | `[sleep_min*6][0][move_wake][close_light]` | verified |
+| `0x07` | Power management | `4` | `[sleep_min*6][move_wake][1][close_light]` | verified |
 | `0x08` | Set one key / macro | `n*4+1` | `[5]=key_value`, then `n` x 4-byte records | disassembly, not yet on hardware |
 | `0x09` | Set all keys | `0x0f` | 6 x 3-byte records | verified |
 | `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
@@ -375,13 +375,28 @@ family; the studio does not send it.
 ### Power management — `0x07`
 
 ```text
-00 07 00 01 04 sleep_light ? move_wakeup close_light
+00 07 00 01 04 sleep_light move_wakeup aux close_light
 ```
 
-Four consecutive `_wtoi()` results from the config store. The shipped
-`mouse_tk-gm012.xml` exposes `sleep_light="180"`, `move_wakeup="0"` and
-`move_closelight="0"`, which line up with bytes 5, 7 and 8; byte 6 is
-unlabelled.
+Four bytes at frame offsets `[5..8]` (`payload[0..3]`). Captured from the
+vendor tool's UI, with the sleep timeout at 6 minutes:
+
+```text
+wake off: 07 00 01 04 24 00 01 00
+wake on:  07 00 01 04 24 01 01 00
+```
+
+| Frame | Payload | Meaning |
+|---|---|---|
+| `[5]` | `[0]` | sleep timeout, **minutes × 6** |
+| `[6]` | `[1]` | move wake-up, `1` = on |
+| `[7]` | `[2]` | constant `1` in every capture; echoed back unchanged |
+| `[8]` | `[3]` | `move_closelight`, `0` on this model |
+
+The byte at `[7]` is a fixed marker rather than `move_closelight`; the
+`_wtoi()` ordering recovered from the binary put those two fields one slot too
+far right. `move_closelight` is always written as `0`, its vendor default, and
+`[7]` is written as `1` to match the vendor.
 
 `sleep_light` is not minutes: the firmware stores **minutes × 6**. Captured 1 min
 as `0x06` and 30 min as `0xB4` (180). The vendor's eight options map as:
@@ -391,9 +406,6 @@ as `0x06` and 30 min as `0xB4` (180). The vendor's eight options map as:
 | Wire | `06` | `0C` | `1E` | `24` | `3C` | `5A` | `78` | `B4` |
 
 So the XML's default `sleep_light="180"` is 30 minutes, not 180 minutes.
-
-Only sleep and move wake-up have UI on this model. `move_closelight` is always
-written as `0`, its vendor default.
 
 ### Keys — `0x09`
 
@@ -504,12 +516,13 @@ them, but the command is what selects a read:
 | `0x14` | `0x04` | 18 B | six RGB triples at `[4]` |
 | `0x15` | `0x05` | 24 B | lighting (unused on this model) |
 | `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |
-| `0x17` | `0x07` | 5 B | `[sleep_min*6][0][wake][closelight][0]` |
+| `0x17` | `0x07` | 5 B | `[sleep_min*6][wake][aux][closelight][0]` |
 | `0x20` | — | 2 B | mouse firmware, see below |
 
 Two of these confirm earlier guesses. `0x17` returns `1e 00 01 00 00` —
-sleep 5 min (`0x1E` = 30 / 6), wake on, closelight off — matching the 4-byte
-write of `0x07`. And `0x13` decodes through the same table as the write path:
+sleep 5 min (`0x1E` = 30 / 6), wake off, and the constant `1` marker — matching
+the 4-byte write of `0x07` (`[4]` sleep, `[5]` wake, `[6]` aux). And `0x13`
+decodes through the same table as the write path:
 
 ```text
 13 00 01 19  00 | 16 00 16 00 | cc 00 cc 00 | 30 00 30 00 | 40 00 40 00 | 80 00 80 00 | dc 00 dc 00 | 00 00

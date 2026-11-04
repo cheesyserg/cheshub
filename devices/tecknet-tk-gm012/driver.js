@@ -220,8 +220,9 @@ const DEFAULTS = {
   dpiCount: 6,        // dpi_count: low nibble of 0x03 payload[0]
   dpiIndex: 1,        // default_dpi="2" is 1-based -> index 1
   sleep: 30,          // minutes; wire code is minutes * 6 (XML sleep_light="180")
-  sleepVersion: 2,    // state migration marker for the sleep codec
-  moveWake: false,    // move_wakeup value="0"
+  sleepVersion: 3,    // state migration marker for the power payload layout
+  moveWake: false,    // move_wakeup value="0", payload index 1
+  powerAux: 1,        // payload index 2; constant 1 in every capture, echoed back
   keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"],
   keyRecords: null    // raw 3-byte 0x09 records, filled by readKeys()
 };
@@ -511,15 +512,20 @@ async function readKeys() {
   return true;
 }
 
+/* Reply payload starts at [4]: [sleep][wake][aux][close]. Verified against the
+   vendor launch traffic `17 00 01 05 1e 00 01 00 00` (sleep 5 min, wake off,
+   aux 1). Reading the old index 2 picked up the constant aux byte, so the UI
+   always showed move wake as enabled. */
 async function readPower() {
   const res = await sendCommand(CMD.POWER_READ, [], 0, { isWrite: false });
-  if (!res.reply || res.reply.length < 8) return false;
+  if (!res.reply || res.reply.length < 7) return false;
   const wire = res.reply[4];
   if (wire > 0) {
     const minutes = wire / SLEEP_UNIT;
     state.sleep = SLEEP_OPTIONS.includes(minutes) ? minutes : Math.round(minutes * 10) / 10;
   }
-  state.moveWake = res.reply[6] === 1;
+  state.moveWake = res.reply[5] === 1;
+  state.powerAux = res.reply[6] === 0 ? 0 : 1;
   return true;
 }
 
@@ -575,11 +581,15 @@ async function applyDpiColors() {
   return sendCommand(CMD.DPI_COLOR, payload, 0x12);
 }
 
-/* move_closelight has no UI on this model (custom show_* = 0), so it is
-   always written at the vendor default of 0. */
+/* Payload is [sleep][wake][aux][close]. Captured from the vendor tool:
+     wake off: 07 00 01 04 24 00 01 00
+     wake on:  07 00 01 04 24 01 01 00
+   so move wake-up is payload index 1. move_closelight has no UI on this model
+   (custom show_* = 0); its slot is written as 0 and `aux` is echoed back from
+   the device instead of being forced to a literal. */
 async function applyPower() {
   const wire = Math.max(1, Math.min(255, Math.round(state.sleep * SLEEP_UNIT)));
-  return sendCommand(CMD.POWER, [wire, 0, state.moveWake ? 1 : 0, 0], 4);
+  return sendCommand(CMD.POWER, [wire, state.moveWake ? 1 : 0, state.powerAux ? 1 : 0, 0], 4);
 }
 
 /* Command 0x09 carries all six bindings as 3-byte records, ordered by
@@ -1141,11 +1151,12 @@ function buildProfiles() {
       const saved = profilesNow[btn.dataset.load];
       if (!saved) return;
       state = Object.assign(structuredClone(DEFAULTS), saved.state);
-      if (!saved.state || saved.state.sleepVersion !== 2) {
+      if (!saved.state || (saved.state.sleepVersion !== 2 && saved.state.sleepVersion !== 3)) {
         const legacy = Number(saved.state && saved.state.sleep);
         state.sleep = Number.isFinite(legacy) ? nearestSleep(legacy / SLEEP_UNIT) : 30;
       }
-      state.sleepVersion = 2;
+      state.sleepVersion = 3;
+      if (state.powerAux !== 0 && state.powerAux !== 1) state.powerAux = 1;
       normalizeKeyRecords();
       if (saved.macro) {
         if (Array.isArray(saved.macro.steps)) macroSteps = saved.macro.steps;
@@ -1261,14 +1272,15 @@ function restoreState() {
     if (raw) {
       const saved = JSON.parse(raw);
       state = Object.assign(structuredClone(DEFAULTS), saved);
-      if (saved && saved.sleepVersion !== 2) {
+      if (saved && saved.sleepVersion !== 2 && saved.sleepVersion !== 3) {
         // Older builds stored the firmware code directly (minutes * 6).
         const legacy = Number(saved.sleep);
         state.sleep = Number.isFinite(legacy) ? nearestSleep(legacy / SLEEP_UNIT) : 30;
       }
     }
   } catch (err) { /* ignore */ }
-  state.sleepVersion = 2;
+  state.sleepVersion = 3;
+  if (state.powerAux !== 0 && state.powerAux !== 1) state.powerAux = 1;
   if (!Number.isFinite(state.sleep) || state.sleep <= 0) state.sleep = 30;
   if (!Number.isInteger(state.dpiIndex) || state.dpiIndex < 0 || state.dpiIndex > 5) {
     state.dpiIndex = DEFAULT_STAGE;

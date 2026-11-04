@@ -59,7 +59,7 @@ direction bit flipped:
 | `0x04` | DPI colours | write | `0x12` | 6 × RGB | echo |
 | `0x05` | Lighting | write | varies | not used on this model | echo |
 | `0x06` | Sensor / LOD | write | `5` | not exposed on this model | echo |
-| `0x07` | Power | write | `4` | `[sleep*6][0][wake][close]` | echo |
+| `0x07` | Power | write | `4` | `[sleep*6][wake][1][close]` | echo |
 | `0x08` | Macro body | write | `n*4+1` | key + n × 4 B records | echo |
 | `0x09` | Button bindings | write | `0x0F` | 6 × 3 B records | echo |
 | `0x0E` | Reset indicator | write | `1` | `01` | echo |
@@ -147,16 +147,28 @@ Not used on this model.
 ## `0x07` / `0x17` — power management
 
 ```text
-write: 00 07 00 01 04 S 00 W C
+write: 00 07 00 01 04 S W A C
 read:  00 17 00 00 ...
 ```
 
-| Byte | Meaning |
-|---|---|
-| `[5]` / S | sleep timeout, **minutes × 6** |
-| `[6]` | reserved, 0 |
-| `[7]` / W | move wake-up, 1 = on |
-| `[8]` / C | close-light timeout, 0 on this model |
+| Payload | Frame | Meaning |
+|---|---|---|
+| `[0]` / S | `[5]` | sleep timeout, **minutes × 6** |
+| `[1]` / W | `[6]` | move wake-up, 1 = on |
+| `[2]` / A | `[7]` | constant `1`, echoed back from the device |
+| `[3]` / C | `[8]` | close-light timeout, 0 on this model |
+
+Captured from the vendor UI with the timeout at 6 minutes:
+
+```text
+wake off: 07 00 01 04 24 00 01 00
+wake on:  07 00 01 04 24 01 01 00
+```
+
+The only byte that moves with the toggle is payload index 1, so move wake-up is
+**not** the third payload byte (an earlier map placed it there and the toggle
+then wrote the constant marker instead). The `0x17` reply mirrors the same layout
+from `[4]`: `[4]` sleep, `[5]` wake, `[6]` aux, `[7]` close.
 
 Sleep options:
 
@@ -164,8 +176,8 @@ Sleep options:
 |---|---|---|---|---|---|---|---|---|
 | Wire | `06` | `0C` | `1E` | `24` | `3C` | `5A` | `78` | `B4` |
 
-The XML default `sleep_light="180"` is 30 minutes. The `0x17` reply carries the
-same four bytes from `[4]`. Verified.
+The XML default `sleep_light="180"` is 30 minutes. The launch capture's
+`17 00 01 05 1e 00 01 00 00` is a 5-minute timeout with wake off. Verified.
 
 ## `0x08` — macro body
 
@@ -345,7 +357,7 @@ Unused on this model.
 
 ## `0x17` — read power
 
-Returns `[sleep*6][0][wake][close][0]` from `[4]`; see `0x07`.
+Returns `[sleep*6][wake][aux][close][0]` from `[4]`; see `0x07`.
 
 ## `0x20` — firmware
 
@@ -377,7 +389,7 @@ registers above:
 | `dpi_groupN_value` | DPI value for stage N | `0x03` record N |
 | `dpi_groupN_rgb` | indicator colour for stage N | `0x04` record N |
 | `sleep_light` | idle timeout, minutes × 6 | `0x07[5]` |
-| `move_wakeup` | wake on movement, 0/1 | `0x07[7]` |
+| `move_wakeup` | wake on movement, 0/1 | `0x07[6]` |
 | `move_closelight` | close-light timeout, 0 on this model | `0x07[8]` |
 | `key_value` / `func_type` / `func_value` | button binding | `0x09` record `key_value` |
 | macro records | events for one key | `0x08` |
