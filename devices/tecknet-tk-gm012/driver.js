@@ -120,13 +120,19 @@ const KEY_ACTIONS = [
 
 /* Wire records for command 0x09, three bytes each, verified against captures:
    mouse buttons are HID button bits, media actions use the consumer usage.
-   Record index is key_value, not visual order. */
+   Record index is key_value, not visual order. Double-click and scroll come
+   from SetMouseKeyMacroData's func_type 1 switch and are not capture-verified. */
 const KEY_RECORDS = {
   "Left-Click":  [0x10, 0x01, 0x00],
   "Right-Click": [0x10, 0x02, 0x00],
   "Middle-Click": [0x10, 0x04, 0x00],
   "Backward":    [0x10, 0x08, 0x00],
   "Forward":     [0x10, 0x10, 0x00],
+  "Double-Click": [0x30, 0x32, 0x03],
+  "Scroll Up":   [0x20, 0x01, 0x00],
+  "Scroll Down": [0x20, 0xFF, 0x00],
+  "Scroll Left": [0x10, 0x00, 0xF5],
+  "Scroll Right": [0x10, 0x00, 0xF6],
   "Volume +":    [0x80, 0xE9, 0x00],
   "Volume -":    [0x80, 0xEA, 0x00],
   "Mute":        [0x80, 0xE2, 0x00],
@@ -201,10 +207,12 @@ const DEFAULTS = {
     { value: 12000, color: "#FF4400" }
   ],
   rate: 1000,         // report_rate default_value="1" == 1000 Hz (code 1)
-  dpiCount: 6,        // dpi_count: payload[0] of 0x03
+  dpiCount: 6,        // dpi_count: low nibble of 0x03 payload[0]
+  dpiIndex: 1,        // default_dpi="2" is 1-based -> index 1
   sleep: 180,         // sleep_light value="180"
   moveWake: false,    // move_wakeup value="0"
-  keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"]
+  keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"],
+  keyRecords: null    // raw 3-byte 0x09 records, filled by readKeys()
 };
 
 /* default_dpi="2" is 1-based, so the second stage is active out of the box. */
@@ -418,9 +426,16 @@ async function readRate() {
 async function readDpi() {
   const res = await sendCommand(CMD.DPI_READ, [], 0, { isWrite: false });
   if (!res.reply || res.reply.length < 29) return false;
-  if (res.reply[4] >= 1 && res.reply[4] <= 6) state.dpiCount = res.reply[4];
+  const packed = res.reply[4];
+  const count = packed & 0x0F;
+  const index = (packed >> 4) & 0x0F;
+  if (count >= 1 && count <= 6) state.dpiCount = count;
+  if (index >= 0 && index < 6) {
+    state.dpiIndex = Math.min(index, Math.max(0, state.dpiCount - 1));
+    selectedStage = state.dpiIndex;
+  }
   for (let i = 0; i < 6; i++) {
-    const base = 5 + i * 4;                 // [4] is the leading zero
+    const base = 5 + i * 4;                 // [4] is the packed index/count
     const code = res.reply[base] | (res.reply[base + 1] << 8);
     state.dpi[i].value = decodeDpi(code);
   }
@@ -439,17 +454,39 @@ async function readDpiColors() {
   return true;
 }
 
+/* Names for the 0x09 record classes, used when a binding is not in the
+   KEY_RECORDS table. The raw bytes stay visible so a vendor-tool binding can
+   still be identified and written back unchanged. */
+const KEY_CLASS_NAMES = {
+  0x10: "Mouse",
+  0x20: "Scroll",
+  0x30: "Double/Speed",
+  0x40: "DPI",
+  0x60: "Special",
+  0x70: "Keyboard",
+  0x80: "Media",
+  0x90: "Macro"
+};
+
+function describeKeyRecord(record) {
+  const joined = record.join(",");
+  for (const [name, rec] of Object.entries(KEY_RECORDS)) {
+    if (rec.join(",") === joined) return name;
+  }
+  if (record[0] === 0x90) return "Macro";
+  const kind = KEY_CLASS_NAMES[record[0] & 0xF0] || "Custom";
+  return `${kind} (${hexOf(record, 3).toUpperCase()})`;
+}
+
 async function readKeys() {
   const res = await sendCommand(CMD.KEYS_READ, [], 0, { isWrite: false });
   if (!res.reply || res.reply.length < 22) return false;
-  const byRecord = new Map();
-  for (const [name, record] of Object.entries(KEY_RECORDS)) {
-    byRecord.set(record.join(","), name);
-  }
+  const records = new Array(6);
   for (let value = 0; value < 6; value++) {
     const record = Array.from(res.reply.slice(4 + value * 3, 7 + value * 3));
     const visual = KEYS.findIndex((k) => k.value === value);
     if (visual < 0) continue;
+    records[visual] = record;
     if (record[0] === 0x90) {
       // Key binding to a macro slot. [1] = key_value | mode flag, [2] = loops.
       state.keys[visual] = "Macro";
@@ -459,10 +496,9 @@ async function readKeys() {
       macroTarget = visual;
       continue;
     }
-    const name = byRecord.get(record.join(","));
-    if (!name) continue;
-    state.keys[visual] = name;
+    state.keys[visual] = describeKeyRecord(record);
   }
+  state.keyRecords = records;
   return true;
 }
 
@@ -512,10 +548,16 @@ async function applyRate() {
 
 async function applyDpi() {
   const payload = new Array(25).fill(0);
-  payload[0] = Math.max(1, Math.min(6, state.dpiCount));   // active stage count
+  // byte 0 packs the active stage (high nibble) and stage count (low nibble).
+  // SetMouseDPIData does `(dpi_index << 4) | dpi_count`.
+  const index = Math.max(0, Math.min(5, state.dpiIndex));
+  const count = Math.max(1, Math.min(6, state.dpiCount));
+  const active = Math.max(0, Math.min(count - 1, index));
+  state.dpiIndex = active;
+  payload[0] = ((active & 0x0F) << 4) | (count & 0x0F);
   for (let i = 0; i < 6; i++) {
     const code = encodeDpi(state.dpi[i].value);
-    const base = 1 + i * 4;                    // payload[0] stays zero
+    const base = 1 + i * 4;                    // six 4-byte records after byte 0
     payload[base] = code & 0xFF;
     payload[base + 1] = (code >> 8) & 0xFF;
     payload[base + 2] = code & 0xFF;           // Y axis carries the same code
@@ -548,18 +590,34 @@ async function applyPower() {
    even though six records follow, so that constant is copied verbatim. */
 async function applyKeys() {
   const records = new Array(6);
+  if (!Array.isArray(state.keyRecords)) state.keyRecords = new Array(6);
   for (let i = 0; i < KEYS.length; i++) {
     const value = KEYS[i].value;
-    if (state.keys[i] === "Macro") {
-      // 0x90 = macro slot. [1] = key_value | mode flag, [2] = repeat count.
-      const flag = macroMode === "repeat" ? 0x20 : macroMode === "toggle" ? 0x40 : 0x10;
-      const loops = macroMode === "repeat" ? Math.max(1, Math.min(255, macroRepeat)) : 0;
-      records[value] = [0x90, value | flag, loops];
-      continue;
+    const action = state.keys[i];
+    let record = null;
+
+    if (action === "Macro") {
+      const raw = Array.isArray(state.keyRecords[i]) ? state.keyRecords[i] : null;
+      if (raw && raw[0] === 0x90 && i !== macroTarget) {
+        // Another macro key read from the mouse keeps its own mode/repeat.
+        record = raw.slice();
+      } else {
+        // 0x90 = macro slot. [1] = key_value | mode flag, [2] = repeat count.
+        const flag = macroMode === "repeat" ? 0x20 : macroMode === "toggle" ? 0x40 : 0x10;
+        const loops = macroMode === "repeat" ? Math.max(1, Math.min(255, macroRepeat)) : 0;
+        record = [0x90, value | flag, loops];
+      }
+    } else if (KEY_RECORDS[action]) {
+      record = KEY_RECORDS[action].slice();
+    } else if (!KEY_ACTIONS.includes(action) && Array.isArray(state.keyRecords[i])) {
+      // A binding read from the mouse that this studio cannot name. Preserve
+      // its exact bytes instead of overwriting it with a default.
+      record = state.keyRecords[i].slice();
     }
-    const record = KEY_RECORDS[state.keys[i]];
-    if (!record) return { ok: false, error: `"${state.keys[i]}" is not encodable` };
+
+    if (!record) return { ok: false, error: `"${action}" is not encodable` };
     records[value] = record;
+    state.keyRecords[i] = record.slice();
   }
   const payload = [];
   for (const record of records) payload.push(...record);
@@ -949,8 +1007,16 @@ function buildKeySelects() {
   for (let i = 0; i < KEYS.length; i++) {
     const select = $("btn-select-" + i);
     if (!select) continue;
-    select.innerHTML = KEY_ACTIONS
-      .map((a) => `<option${a === state.keys[i] ? " selected" : ""}>${a}</option>`)
+    const current = state.keys[i] || "Disable Key";
+    const actions = KEY_ACTIONS.slice();
+    const raw = state.keyRecords && Array.isArray(state.keyRecords[i]) ? state.keyRecords[i] : null;
+    const rawLabel = raw ? describeKeyRecord(raw) : null;
+    // Keep a binding read from the mouse even when it is not in the built-in
+    // action list, so the dropdown reflects the hardware rather than the XML.
+    if (rawLabel && !actions.includes(rawLabel)) actions.unshift(rawLabel);
+    if (!actions.includes(current)) actions.unshift(current);
+    select.innerHTML = actions
+      .map((a) => `<option${a === current ? " selected" : ""}>${a}</option>`)
       .join("");
     select.onchange = () => {
       state.keys[i] = select.value;
@@ -966,23 +1032,45 @@ function buildKeySelects() {
       saveState();
     };
     const label = $("anchor-label-" + i);
-    if (label) label.textContent = `${i + 1}. ${state.keys[i]}`;
+    if (label) label.textContent = `${i + 1}. ${current}`;
+
+    const hint = $("key-hint-" + i);
+    if (hint) {
+      hint.textContent = `${hint.dataset.base || ""} · `
+        + (raw ? `wire ${hexOf(raw, 3).toUpperCase()}` : "not read yet");
+    }
   }
+}
+
+function updateDpiCaption() {
+  const caption = $("caption-dpi");
+  if (!caption) return;
+  caption.textContent = `${state.dpiCount} DPI STAGE${state.dpiCount === 1 ? "" : "S"}`;
 }
 
 function buildDpiCards() {
   const grid = $("dpi-grid");
   if (!grid) return;
   grid.innerHTML = state.dpi.map((stage, i) => `
-    <button class="dpi-card${i === selectedStage ? " active" : ""}${i >= state.dpiCount ? " inactive" : ""}"
+    <button class="dpi-card${i === selectedStage ? " active" : ""}${i >= state.dpiCount ? " inactive" : ""}${i === state.dpiIndex ? " live" : ""}"
             data-stage="${i}" type="button">
       <span class="dpi-card-head" style="background:${stage.color}">DPI ${i + 1}</span>
       <span class="dpi-card-value" style="color:${stage.color}">${stage.value}</span>
     </button>`).join("");
 
   grid.querySelectorAll(".dpi-card").forEach((card) => {
-    card.onclick = () => {
-      selectedStage = Number(card.dataset.stage);
+    card.onclick = async () => {
+      const stage = Number(card.dataset.stage);
+      selectedStage = stage;
+      if (stage < state.dpiCount) {
+        state.dpiIndex = stage;
+        saveState();
+        const res = await applyDpi();
+        if (!res.ok) showToast(res.error || "DPI write failed");
+        updateDiagnostics();
+      } else {
+        showToast(`DPI ${stage + 1} is inactive — raise DPI COUNT first`);
+      }
       buildDpiCards();
       syncDpiControls();
       updateStageLed();
@@ -991,11 +1079,12 @@ function buildDpiCards() {
 }
 
 /* The only LED on this model: the DPI indicator under the wheel, tinted with
-   the colour of the stage it shows. */
+   the colour of the stage the mouse is currently on. */
 function updateStageLed() {
   const led = $("live-led");
   if (!led) return;
-  const color = state.dpi[selectedStage].color;
+  const index = Math.max(0, Math.min(5, state.dpiIndex));
+  const color = state.dpi[index].color;
   led.style.backgroundColor = color;
   led.style.boxShadow = `0 0 4px #fff, 0 0 10px ${color}, 0 0 22px ${color}`;
 }
@@ -1063,6 +1152,7 @@ function buildProfiles() {
       const saved = profilesNow[btn.dataset.load];
       if (!saved) return;
       state = Object.assign(structuredClone(DEFAULTS), saved.state);
+      normalizeKeyRecords();
       if (saved.macro) {
         if (Array.isArray(saved.macro.steps)) macroSteps = saved.macro.steps;
         if (Number.isInteger(saved.macro.target) && KEYS[saved.macro.target]) macroTarget = saved.macro.target;
@@ -1109,6 +1199,7 @@ function refreshUI() {
     macroCountInput.disabled = macroMode !== "repeat";
   }
 
+  updateDpiCaption();
   document.querySelectorAll("#rate-control .seg-btn").forEach((b) => {
     b.classList.toggle("active", Number(b.dataset.rate) === state.rate);
   });
@@ -1148,11 +1239,31 @@ function loadMacro() {
   } catch (err) { /* ignore */ }
 }
 
+function normalizeKeyRecords() {
+  if (!Array.isArray(state.keys) || state.keys.length !== KEYS.length) {
+    state.keys = structuredClone(DEFAULTS.keys);
+  }
+  if (!Array.isArray(state.keyRecords) || state.keyRecords.length !== KEYS.length) {
+    state.keyRecords = state.keys.map((name) => {
+      const record = KEY_RECORDS[name];
+      return record ? record.slice() : null;
+    });
+  }
+}
+
 function restoreState() {
   try {
     const raw = localStorage.getItem("tk-gm012.state");
     if (raw) state = Object.assign(structuredClone(DEFAULTS), JSON.parse(raw));
   } catch (err) { /* ignore */ }
+  if (!Number.isInteger(state.dpiIndex) || state.dpiIndex < 0 || state.dpiIndex > 5) {
+    state.dpiIndex = DEFAULT_STAGE;
+  }
+  if (!Number.isInteger(state.dpiCount) || state.dpiCount < 1 || state.dpiCount > 6) {
+    state.dpiCount = 6;
+  }
+  normalizeKeyRecords();
+  selectedStage = state.dpiIndex;
 }
 
 function loadProfiles() {
@@ -1407,8 +1518,18 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast(ok ? "Synced from device" : "Connect the mouse first");
   });
 
+  $("btn-read-keys")?.addEventListener("click", async () => {
+    if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
+    const ok = await readKeys();
+    refreshUI();
+    saveState();
+    updateDiagnostics();
+    showToast(ok ? "Button mapping read from mouse" : "No button reply — check DIAGNOSTICS");
+  });
+
   $("btn-reset-keys")?.addEventListener("click", () => {
     state.keys = structuredClone(DEFAULTS.keys);
+    state.keyRecords = null;
     buildKeySelects();
     saveState();
     showToast("Keys reset to vendor defaults");
@@ -1458,6 +1579,13 @@ document.addEventListener("DOMContentLoaded", () => {
       `info reply ${text("diag-info")}`,
       `last cmd   ${text("diag-last")}`,
       `last error ${text("diag-error")}`,
+      "buttons:",
+      ...state.keys.map((name, i) => {
+        const raw = state.keyRecords && Array.isArray(state.keyRecords[i])
+          ? state.keyRecords[i].map((b) => b.toString(16).padStart(2, "0")).join(" ")
+          : "—";
+        return `  ${i + 1}: ${name} [${raw}]`;
+      }),
       "collections:",
       ...rows,
       "wire log:",
@@ -1507,10 +1635,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("sel-dpi-count")?.addEventListener("change", async (e) => {
     state.dpiCount = Number(e.target.value);
+    if (state.dpiIndex >= state.dpiCount) {
+      state.dpiIndex = state.dpiCount - 1;
+      selectedStage = state.dpiIndex;
+    }
     buildDpiCards();
+    syncDpiControls();
+    updateStageLed();
+    updateDpiCaption();
     saveState();
-    await applyDpi();
+    const res = await applyDpi();
     updateDiagnostics();
+    if (!res.ok) showToast(res.error || "DPI write failed");
   });
 
   $("sel-sleep")?.addEventListener("change", async (e) => {

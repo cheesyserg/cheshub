@@ -25,8 +25,10 @@ configure it. No install, no admin rights, no background service.
 
 USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 
-- Button mapping for all six keys, defaults taken from the vendor XML
-- Six DPI stages (50–24000) with per-stage indicator colour
+- Button mapping for all six keys, read back from the mouse (`0x11`) and with
+  custom records preserved; defaults taken from the vendor XML
+- Six DPI stages (50–24000), click-to-activate, selectable stage count and
+  per-stage indicator colour
 - Report rate 125 / 250 / 500 / 1000 Hz
 - Sleep timeout and move wake-up
 - Macro recorder with keyboard/modifier events (up to six), per-key upload and

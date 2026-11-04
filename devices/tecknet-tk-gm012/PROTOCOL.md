@@ -252,7 +252,7 @@ not implemented here.
 | Cmd | Function | byte 4 | Payload | Confidence |
 |---|---|---|---|---|
 | `0x02` | Report rate | `1` | `[rate]`, `1000 / hz` (125→`08`, 1000→`01`) | verified |
-| `0x03` | DPI stages | `0x25` | `[5]=count`, 6 x 4 bytes at `[6..29]` | verified |
+| `0x03` | DPI stages | `0x25` | `[5]=index<<4 | count`, 6 x 4 bytes at `[6..29]` | verified |
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
@@ -280,19 +280,29 @@ settings.
 
 ### DPI — `0x03`
 
-Payload byte 0 is the **active stage count**; six 4-byte stage records follow
-from byte 1. Each record is the **encoded** DPI for X and Y, not the value shown
-in the UI:
+Payload byte 0 packs two fields:
 
 ```text
-[5]       active stage count, 1..6
+payload[0] = (dpi_index << 4) | dpi_count
+```
+
+`dpi_index` is the **active stage**, 0-based; `dpi_count` is the number of
+enabled stages, 1..6. `SetMouseDPIData @ 0x34DC0` reads both config keys
+(`dpi_index`, `dpi_count`), does `shl index, 4; or count`, and stores the result
+at `[5]`. Six 4-byte stage records follow from byte 1. Each record is the
+**encoded** DPI for X and Y, not the value shown in the UI:
+
+```text
+[5]       (active stage << 4) | stage count
 [6..7]    stage 1 X code, little endian
 [8..9]    stage 1 Y code (same value)
 [10..]    stage 2..6, same layout
 ```
 
-Selected 1..6 in the vendor UI and the echoed byte walks `01 02 03 04 05 06`.
-The matching read `0x13` returns the count at `[4]`, so both directions work.
+Both fields show up in captures: changing the count with stage 1 selected
+echoes `01 02 03 04 05 06`; clicking stages 1..6 echoes
+`00 10 20 30 40 50`. The matching read `0x13` returns the same packed byte at
+`[4]`: count in the low nibble, active index in the high nibble.
 
 `GetMouseDPIValue @ 0x1D740` produces the stage code from the display value:
 
@@ -388,6 +398,8 @@ record 3):
 | First byte | Meaning | Second byte |
 |---|---|---|
 | `0x10` | mouse button | HID button bit: `01` left, `02` right, `04` middle, `08` back, `10` forward |
+| `0x20` | scroll | `01` up, `FF` down; horizontal variants use `0xF5` / `0xF6` in byte 2 (inferred) |
+| `0x30` | double-click / speed | `30 32 03` in the vendor's double-click path (inferred) |
 | `0x80` | consumer control | HID usage: `E9` vol+, `EA` vol-, `E2` mute, `CD` play/pause, `B5` next, `B6` prev, `B7` stop |
 | `0x40` | special | `01` = DPI loop |
 | `0x60` | disabled | `00` |
@@ -401,6 +413,13 @@ confirmed on hardware.
 
 The length byte is `0x0f` (15) even though 18 bytes of records follow — copied
 verbatim, since that is what the vendor sends and the device accepts.
+
+The read counterpart `0x11` returns the same six records, so the studio can
+show what the mouse actually has rather than the XML defaults. It does this on
+connect, on **SYNC**, and on the **READ FROM MOUSE** button. Records outside the
+built-in table — usually a keyboard shortcut or a vendor-specific action — are
+labelled by class with their raw bytes, kept in `state.keyRecords`, and written
+back unchanged by the next `0x09` command.
 
 ### Keys and macros — `0x08`
 
@@ -470,7 +489,7 @@ them, but the command is what selects a read:
 | `0x10` | — | 32 B | device info: `[13]` battery, `[12]` charging, `[14]` link, `[10]` type |
 | `0x11` | `0x09` | 18 B | six 3-byte key records, `key_value` order |
 | `0x12` | `0x02` | 1 B | report rate code at `[4]` |
-| `0x13` | `0x03` | 25 B | active stage count at `[4]`, six 4-byte DPI codes at `[5]`, `[9]`, … |
+| `0x13` | `0x03` | 25 B | packed active stage/count at `[4]`, six 4-byte DPI codes at `[5]`, `[9]`, … |
 | `0x14` | `0x04` | 18 B | six RGB triples at `[4]` |
 | `0x15` | `0x05` | 24 B | lighting (unused on this model) |
 | `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |

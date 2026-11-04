@@ -109,7 +109,8 @@
 
           <div class="stage-caption">
             <span class="caption-tag">6 BUTTONS</span>
-            <span class="caption-tag">6 DPI STAGES</span>
+            <span class="caption-tag" id="caption-dpi" onclick="switchTab('tab-performance')"
+                  style="cursor:pointer;" title="Open Performance">6 DPI STAGES</span>
             <span class="caption-tag">2.4G / USB</span>
           </div>
         </div>
@@ -123,23 +124,27 @@
               <div class="section-desc">Assign an action to each of the six physical buttons. Wire index
                 (key_value) is shown per row — keys 4 and 5 are swapped relative to visual order.</div>
               <div class="key-grid">
-                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint">Left button · value 0</span></div>
-                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint">Right button · value 1</span></div>
-                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint">Wheel click · value 2</span></div>
-                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint">Side, front · value 4</span></div>
-                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint">Side, rear · value 3</span></div>
-                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint">DPI loop · value 5</span></div>
+                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint" id="key-hint-0" data-base="Left button · value 0">Left button · value 0</span></div>
+                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint" id="key-hint-1" data-base="Right button · value 1">Right button · value 1</span></div>
+                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint" id="key-hint-2" data-base="Wheel click · value 2">Wheel click · value 2</span></div>
+                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint" id="key-hint-3" data-base="Side, front · value 4">Side, front · value 4</span></div>
+                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint" id="key-hint-4" data-base="Side, rear · value 3">Side, rear · value 3</span></div>
+                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint" id="key-hint-5" data-base="DPI loop · value 5">DPI loop · value 5</span></div>
               </div>
               <div class="section-actions">
+                <button class="btn-ghost font-impact" id="btn-read-keys" type="button">READ FROM MOUSE</button>
                 <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">RESET ALL KEYS</button>
                 <button class="btn-primary font-impact" id="btn-apply-keys" type="button">WRITE TO DEVICE</button>
               </div>
               <p class="section-note">
-                Writes command <code>0x09</code> with six 3-byte records in
-                <code>key_value</code> order. Mouse buttons, media keys, DPI loop,
-                disable and macro slots are encoded. Macro slots take their body from
-                the <strong>MACRO</strong> tab; keyboard and system-shortcut actions are
-                not decoded yet and are refused rather than sent wrong.
+                <strong>READ FROM MOUSE</strong> issues command <code>0x11</code>, which
+                returns the same six 3-byte records the mouse is currently using. Known
+                actions are named; anything else is shown with its class and raw bytes
+                (for example <code>Keyboard (70 1C 00)</code>) and is written back
+                unchanged if you leave it selected. <strong>WRITE TO DEVICE</strong>
+                sends <code>0x09</code>. Macro slots take their body from the
+                <strong>MACRO</strong> tab; keyboard and system-shortcut actions are not
+                fully decoded yet, so they are preserved rather than guessed.
               </p>
             </div>
           </div>
@@ -148,7 +153,8 @@
           <div class="tab-panel" id="tab-performance">
             <div class="panel-section">
               <div class="section-title font-impact">DPI SENSITIVITY</div>
-              <div class="section-desc">Six stages, 50 to 24000 CPI. The active stage lights up on the mouse.</div>
+              <div class="section-desc">Six stages, 50 to 24000 CPI. <strong>DPI COUNT</strong>
+                hides unused stages, and clicking a stage makes it the mouse's active stage.</div>
 
               <div class="dpi-toolbar">
                 <label class="inline-label" for="sel-dpi-count">DPI COUNT</label>
@@ -173,7 +179,10 @@
               <p class="section-note" id="dpi-encode-note">
                 The mouse stores a compressed code, not the displayed value
                 (<code>dpi/50</code> up to 10000, then 100-step, then 1000-step above
-                13000). Values near a boundary round to what the hardware can hold.
+                13000). The first byte of <code>0x03</code> packs
+                <code>(active_stage &lt;&lt; 4) | count</code>, so clicking a card both
+                selects it for editing and switches the mouse to that stage. Values
+                near a boundary round to what the hardware can hold.
               </p>
 
               <div class="section-actions">

@@ -110,7 +110,7 @@ code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
 .key-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .key-row { display: flex; justify-content: space-between; align-items: center; background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 10px 12px; border-radius: 4px; }
 .key-tag { font-size: 11px; font-weight: 800; color: var(--riot-red); letter-spacing: 0.5px; }
-.key-hint { font-size: 11px; color: var(--riot-gray); }
+.key-hint { font-size: 11px; color: var(--riot-gray); text-align: right; line-height: 1.4; }
 
 .dpi-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .inline-label { font-size: 10px; font-weight: 800; letter-spacing: 1px; color: var(--riot-muted); }
@@ -124,6 +124,8 @@ code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
 .dpi-card.active { border-color: var(--riot-red); box-shadow: 0 0 12px var(--riot-red-dim); }
 .dpi-card.inactive { opacity: 0.4; }
 .dpi-card.inactive.active { opacity: 0.75; }
+.dpi-card.live { outline: 1px solid rgba(236, 232, 225, 0.7); outline-offset: -2px; }
+.dpi-card.live .dpi-card-head::after { content: " · LIVE"; }
 .dpi-card-head { font-size: 10px; font-weight: 800; color: #0a1016; padding: 5px 0; text-align: center; letter-spacing: 0.5px; }
 .dpi-card-value { font-size: 13px; font-weight: 700; padding: 9px 0; text-align: center; }
 .dpi-slider { margin-top: 18px; max-width: 100%; }
