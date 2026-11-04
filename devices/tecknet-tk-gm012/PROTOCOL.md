@@ -72,13 +72,15 @@ The build uses the `__fastcall` convention (`/Gr`): first two arguments in
 ## Frame format (**verified**)
 
 `DriverComm::SetDeviceData @ 0x4B300` takes a 65-byte buffer, fixes byte 0,
-computes a checksum and writes it to byte 32:
+computes a checksum and writes it to byte 32. **Only the first 33 bytes ever
+reach the wire** — measured with `hid_probe.py`, a 65-byte write reports
+`33 bytes accepted`, and the reply is 32 bytes.
 
 ```text
-byte  0       report id, always 0x00   (hidapi strips it -> sendReport(0, buf[1..64]))
+byte  0       report id, always 0x00
 byte  1       command
 byte  2       always 0x00
-byte  3       always 0x01
+byte  3       write 0x01 / read 0x00
 byte  4       command-specific length / type byte
 byte  5..31   payload (zero padded)
 byte 32       checksum = (sum of bytes 5..31) & 0xFF
@@ -86,14 +88,41 @@ byte 32       checksum = (sum of bytes 5..31) & 0xFF
 
 The checksum loop is nine unrolled iterations adding three bytes each, i.e.
 exactly bytes `5..31`, stored to `buf[0x20]`. That caps the checksummed payload
-at 27 bytes; every command below fits.
+at 27 bytes, which is why everything fits in a 33-byte report; the 65-byte
+buffer in the source is simply over-allocated.
+
+### Replies
+
+The device answers with 32 bytes: the request with its leading report-id byte
+dropped, and a status byte inserted at `[1]`.
+
+```text
+byte 0        command echoed
+byte 1        status: 0 = accepted, 1 = rejected
+byte 2..3     echoed
+byte 4        echoed length
+byte 5..30    echoed payload
+byte 31       checksum = (sum of bytes 4..30) & 0xFF
+```
+
+Captured reply to the `0x10` read on a real receiver:
+
+```text
+10 00 01 0b 4c 39 33 51 00 00 11 01 00 46 01 00 ... 62
+            'L' '9' '3' 'Q'                 ^^ battery ~70%
+```
+
+`L93Q` is the `dev_id` from `config.xml`. Byte `[13]` tracks battery, `[14]`
+the link state. Acknowledgement timing is loose on the 2.4G receiver: a write's
+reply can arrive only on the next transaction, so a client must not treat a
+short read timeout as a failure.
 
 ## Link startup and acknowledgement
 
 Three details of the vendor I/O path matter when reimplementing it.
 
-**Writes are padded, not truncated.** `_hid_write @ 0x4D580` compares the
-requested length against `dev->output_report_length` and zero-pads when the
+**Writes are resized to the report length.** `_hid_write @ 0x4D580` compares
+the requested length against `dev->output_report_length` and zero-pads when the
 caller passes less:
 
 ```c
@@ -106,10 +135,11 @@ if (len < output_report_length) {
 WriteFile(handle, buf, len, &written, NULL);
 ```
 
-The tool writes 65 bytes for a configuration packet (report id `0x00` followed
-by a 64-byte report) and 33 bytes for a read. Since lengths above the report
-size are passed through untouched, the output report is 65 bytes: one id byte
-plus 64.
+The tool passes 65 bytes for a configuration packet and 33 for a read, but
+`output_report_length` is 33: a 65-byte buffer is cut to the report size by the
+driver, which is why the vendor's 65-byte buffer works and why WebHID — which
+validates the length itself — refuses 64 bytes with
+`Failed to write the report.`
 
 **A reply only counts when byte 1 is zero.** `DriverComm::SetDeviceData @ 0x4B300`:
 

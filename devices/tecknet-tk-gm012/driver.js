@@ -120,6 +120,7 @@ let lastWriteError = "";
 let lastResult = "—";
 let selectedStage = DEFAULT_STAGE;
 let outputReportId = 0;
+let sendLayout = null;   // null = unknown, 0 = 32-byte payload, 1 = 33 bytes as-is
 let probing = false;
 let macroSteps = [];
 let recording = false;
@@ -134,12 +135,16 @@ function checksum(bytes) {
   return sum & 0xFF;
 }
 
-/* Build a 64-byte report with the report id stripped. The vendor writes
-   `00 <cmd> 00 <rw> <len> ...` and lets hidapi keep the leading 0x00 as the
-   report id; WebHID wants the id passed separately, so [0] is dropped here.
-   Byte 3 is 0x01 for writes and 0x00 for reads. */
-function buildReport(cmd, payload, lenByte, isWrite) {
-  const frame = new Uint8Array(65);
+/* Reports are small. Measured with hidapi on the receiver: a 65-byte buffer
+   reaches the wire as 33 bytes and the reply is 32 bytes. Byte 0 is the report
+   id / leading zero, byte 1 the command, byte 4 the payload length and byte 32
+   the checksum over 5..31. Sending 64 bytes in WebHID is instantly refused with
+   "Failed to write the report.", which is what hidapi never does because it
+   truncates/pads to the real report size. */
+const FRAME_SIZE = 33;
+
+function buildFrame(cmd, payload, lenByte, isWrite) {
+  const frame = new Uint8Array(FRAME_SIZE);
   frame[0] = 0x00;
   frame[1] = cmd;
   frame[2] = 0x00;
@@ -147,7 +152,7 @@ function buildReport(cmd, payload, lenByte, isWrite) {
   frame[4] = lenByte === undefined ? payload.length : lenByte;
   for (let i = 0; i < payload.length && i < 27; i++) frame[5 + i] = payload[i] & 0xFF;
   frame[32] = checksum(frame);
-  return frame.slice(1);
+  return frame;
 }
 
 function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
@@ -167,10 +172,8 @@ function logWire(dir, bytes) {
   if (el) el.textContent = wireLog.length ? wireLog.join("\n") : "—";
 }
 
-/* One write, then wait for an input report. `wide` sends the full 65-byte
-   frame instead of the 64-byte payload, which covers units whose descriptor
-   carries no report id. */
-function exchange(report, wide, timeoutMs) {
+/* One write, then wait for an input report. */
+function exchange(bytes, timeoutMs) {
   return new Promise(async (resolve) => {
     let timer = null;
     const settle = (reply) => {
@@ -181,15 +184,9 @@ function exchange(report, wide, timeoutMs) {
     pending = settle;
     timer = setTimeout(() => settle(null), timeoutMs);
 
-    let data = report;
-    if (wide) {
-      data = new Uint8Array(65);
-      data[0] = 0x00;
-      data.set(report, 1);
-    }
-    logWire("TX", data);
+    logWire("TX", bytes);
     try {
-      await hidDevice.sendReport(outputReportId, data);
+      await hidDevice.sendReport(outputReportId, bytes);
     } catch (err) {
       lastWriteError = err && err.message ? err.message : String(err);
       settle(null);
@@ -198,34 +195,55 @@ function exchange(report, wide, timeoutMs) {
 }
 
 /* DriverComm::SetDeviceData writes, then reads up to 50 times at 30 ms and
-   only accepts a reply whose second byte is 0 (hidapi keeps the report id at
-   [0], WebHID strips it). So the wait has to be long: a 2.4G dongle can take
-   a while. Each variant is tried once before moving on. */
-const ATTEMPTS = [
-  { wide: false, timeout: 400 },
-  { wide: true, timeout: 400 },
-  { wide: false, timeout: 1200 }
-];
+   only accepts a reply whose second byte is 0. So the wait has to be
+   generous: a 2.4G dongle can be slow, and the probe showed a write's
+   acknowledgement arriving only on the next transaction. */
+const FIRST_WAIT = 600;
+const RETRY_WAIT = 1500;
+
+/* Two plausible framings, tried in order on the first exchange: a 32-byte
+   payload with the report id passed separately, or the full 33 bytes verbatim.
+   Exactly one is accepted — the other throws "Failed to write the report." — so
+   the first send that resolves tells us the layout for the rest of the session. */
+function candidatePayloads(frame) {
+  if (sendLayout === 0) return [frame.slice(1)];
+  if (sendLayout === 1) return [frame];
+  return [frame.slice(1), frame];
+}
+
+function describeReply(cmd, reply) {
+  // byte 1 is the status byte: 0 = accepted, 1 = rejected
+  const status = reply.length > 1 ? reply[1] : 0xFF;
+  lastResult = `0x${cmd.toString(16)} <- ${reply.length} B [${hexOf(reply, 12)}] status=${status}`;
+  return { ok: true, reply, status, silent: false };
+}
 
 async function sendCommand(cmd, payload, lenByte, opts = {}) {
   if (!hidDevice || !hidDevice.opened) {
     lastResult = "not connected";
     return { ok: false, error: "not connected" };
   }
-  const report = buildReport(cmd, payload, lenByte, opts.isWrite !== false);
-  const plan = opts.attempts ? ATTEMPTS.slice(0, opts.attempts) : ATTEMPTS;
+  const frame = buildFrame(cmd, payload, lenByte, opts.isWrite !== false);
   let lastErr = "";
 
-  for (const attempt of plan) {
+  for (const bytes of candidatePayloads(frame)) {
     lastWriteError = "";
-    const reply = await exchange(report, attempt.wide, attempt.timeout);
-    if (reply && reply.length) {
-      // vendor check: reply[1] == 0 in hidapi terms, reply[0] after WebHID strips the id
-      const ack = reply[0] === 0 || (reply.length > 1 && reply[1] === 0);
-      lastResult = `0x${cmd.toString(16)} <- ${reply.length} B [${hexOf(reply, 16)}]${ack ? "" : " (odd ack)"}`;
-      return { ok: true, reply, ack };
+    const first = await exchange(bytes, FIRST_WAIT);
+    if (lastWriteError) {
+      lastErr = lastWriteError;
+      continue;                       // wrong report length, try the other form
     }
-    if (lastWriteError) lastErr = lastWriteError;
+    if (sendLayout === null) sendLayout = bytes.length === 32 ? 0 : 1;
+    if (first && first.length) return describeReply(cmd, first);
+
+    // Accepted by the OS but quiet so far — give the link a longer window.
+    const second = await exchange(bytes, RETRY_WAIT);
+    if (lastWriteError) {
+      lastErr = lastWriteError;
+      continue;
+    }
+    if (second && second.length) return describeReply(cmd, second);
+    break;                            // correct length, device just did not answer
   }
 
   if (lastErr) {
@@ -356,7 +374,7 @@ async function probeDeviceOnce(device) {
     logWire("RX", bytes);
     if (pending) pending(bytes);
   };
-  const res = await sendCommand(CMD.INFO, [], 0, { isWrite: false, attempts: 1 });
+  const res = await sendCommand(CMD.INFO, [], 0, { isWrite: false });
   hidDevice = prevDevice;
   outputReportId = prevReportId;
   return res.reply || null;

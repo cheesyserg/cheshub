@@ -19,14 +19,14 @@ Usage
 
 Frames
 ------
-The vendor writes 65-byte buffers over hidapi: a leading report id of 0x00,
-then
+The reports are small: 33 bytes out, 32 bytes in. The wire layout is
 
-    [1] command  [2] 0x00  [3] 0x01 write / 0x00 read
-    [4] length   [5..31] payload  [32] checksum = sum(5..31) & 0xFF
+    [0] 0x00    [1] command    [2] 0x00    [3] 0x01 write / 0x00 read
+    [4] length  [5..31] payload           [32] checksum = sum(5..31) & 0xFF
 
-`hid_write` pads short buffers up to the report length, so `write()` here
-accepts anything up to 65 bytes and always puts the right size on the wire.
+The vendor passes a 65-byte buffer to `hid_write`, which resizes it to the real
+report length; `output_report_length` is 33. Replies come back as the request
+with `[0]` dropped and a status byte at `[1]`.
 """
 
 import argparse
@@ -42,7 +42,7 @@ RECEIVERS = [(0x249A, 0x5C2F), (0x248A, 0x5D2E)]
 VENDOR_PAGE = 0xFF01
 VENDOR_USAGE = 0x0010
 
-FRAME_SIZE = 65
+FRAME_SIZE = 33
 INFO_CMD = 0x10
 
 
@@ -51,7 +51,7 @@ def checksum(frame):
 
 
 def build_frame(cmd, payload=b"", write=True, length=None):
-    """Build a 65-byte vendor frame (report id + 64-byte report)."""
+    """Build a 33-byte vendor frame (report id + 32-byte report)."""
     frame = bytearray(FRAME_SIZE)
     frame[0] = 0x00
     frame[1] = cmd & 0xFF
