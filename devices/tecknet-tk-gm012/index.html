@@ -135,9 +135,10 @@
                 <button class="btn-primary font-impact" id="btn-apply-keys" type="button">WRITE TO DEVICE</button>
               </div>
               <p class="section-note">
-                Mappings are always saved to your ChesHub profile. Writing them to the
-                mouse uses command <code>0x08</code>, whose record encoding is only
-                partially recovered — see <code>PROTOCOL.md</code>.
+                Writes command <code>0x09</code> with six 3-byte records in
+                <code>key_value</code> order. Mouse buttons, media keys, DPI loop and
+                disable are encoded; keyboard and macro actions are not yet decoded and
+                are refused rather than sent wrong.
               </p>
             </div>
           </div>

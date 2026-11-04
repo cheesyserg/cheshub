@@ -247,7 +247,7 @@ is DPI Loop. The full action list in the language file runs 106-142 plus 160
 |---|---|---|
 | `dpi_info default_dpi` | `2` | second stage active (1600 CPI, green) |
 | `dpi_count` | `6` | six stages |
-| `report_rate default_value` | `1` | 125 Hz |
+| `report_rate default_value` | `1` | 1000 Hz (code 1) |
 | `report_max` | `4` | 125 / 250 / 500 / 1000 |
 | `sleep_light` | `180` | idle timeout, minutes |
 | `move_wakeup` | `0` | off |
@@ -267,13 +267,14 @@ not implemented here.
 
 | Cmd | Function | byte 4 | Payload | Confidence |
 |---|---|---|---|---|
-| `0x02` | Report rate | `1` | `[rate]`, `1..4` = 125/250/500/1000 Hz | verified |
-| `0x03` | DPI stages | `0x25` | 6 x 4 bytes at `[6..29]` | layout inferred |
+| `0x02` | Report rate | `1` | `[rate]`, `1000 / hz` (125→`08`, 1000→`01`) | verified |
+| `0x03` | DPI stages | `0x25` | 6 x 4 bytes at `[6..29]` | verified |
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
 | `0x07` | Power management | `4` | 4 bytes at `[5..8]` | partially verified |
 | `0x08` | Set one key / macro | `n*4+2` | `[5]=key`, then `n` x 4-byte records | verified |
+| `0x09` | Set all keys | `0x0f` | 6 x 3-byte records | verified |
 | `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
 | `0x0F` | Restore factory | `1` | `[5]=0x01`, `[6]=0xFF` | verified |
 
@@ -289,23 +290,39 @@ the command bytes were cross-checked against the functions that emit them
 00 02 00 01 01 RR
 ```
 
-`RR`: `1` -> 125 Hz, `2` -> 250 Hz, `3` -> 500 Hz, `4` -> 1000 Hz, matching
-`report_max="4"` in `device/mouse_tk-gm012.xml`.
+`RR` is `1000 / hz`, so 125 Hz is `0x08`, 250 Hz `0x04`, 500 Hz `0x02` and
+1000 Hz `0x01`. Captured from the vendor tool while stepping through the four
+settings.
 
-### DPI — `0x03` (layout **inferred**)
+### DPI — `0x03`
 
-Six 4-byte stage records start at byte 6; byte 5 stays zero.
+Six 4-byte stage records start at byte 6; bytes 1..5 stay zero. Each record is
+the **encoded** DPI for X and Y, not the value shown in the UI:
 
 ```text
-[6..7]   DPI, little endian
-[8..9]   16-bit stage colour
+[6..7]   X code, little endian
+[8..9]   Y code, little endian (same value)
 ```
 
-The vendor tool clamps values to 50..24000. Shipped defaults are
-800 / 1600 / 2400 / 3200 / 6400 / 12000.
+`GetMouseDPIValue @ 0x1D740` produces the code from the display value:
 
-Note the length byte is `0x25` (37) while only 25 payload bytes are written —
-byte 4 is therefore a command-specific constant here, not a plain length.
+```text
+dpi <= 10000         ->  dpi / 50
+dpi <  13000         ->  200 + (dpi - 10000) / 100
+dpi >= 13000         ->  221 + (dpi - 13000) / 1000
+```
+
+So 1100 → 22 (`0x16`), 24000 → 232 (`0xE8`). Both appear in captures:
+
+```text
+DPI 24000 -> 03 00 01 25 00 16 00 16 00 e8 00 e8 ...   (0x16 = stage 1 = 1100)
+DPI 50    -> 03 00 01 25 00 01 00 01 00 e8 00 e8 ...
+```
+
+Sending the raw value (the obvious thing to do) makes the mouse land on absurd
+speeds — 24 000 as a raw 16-bit register read back as millions.
+
+The DPI report carries no colour; that is `0x04`.
 
 ### DPI colours — `0x04`
 
@@ -367,6 +384,28 @@ unlabelled.
 Only sleep and move wake-up have UI on this model. `move_closelight` is always
 written as `0`, its vendor default.
 
+### Keys — `0x09`
+
+Captured from the vendor tool. Six 3-byte records, ordered by `key_value`
+(so visual Key 4 / `key_value 4` is record 4, and Key 5 / `key_value 3` is
+record 3):
+
+```text
+09 00 01 0f  10 01 00  10 02 00  10 04 00  10 08 00  80 e9 00  40 01 00  ...
+             left     right    middle    back      vol +     dpi loop
+```
+
+| First byte | Meaning | Second byte |
+|---|---|---|
+| `0x10` | mouse button | HID button bit: `01` left, `02` right, `04` middle, `08` back, `10` forward |
+| `0x80` | consumer control | HID usage: `E9` vol+, `EA` vol-, `E2` mute, `CD` play/pause, `B5` next, `B6` prev, `B7` stop |
+| `0x40` | special | `01` = DPI loop |
+| `0x60` | disabled | `00` |
+| `0x70` | keyboard | modifier + scancode (from `SetMouseKeyMacroData`, not fully decoded) |
+
+The length byte is `0x0f` (15) even though 18 bytes of records follow — copied
+verbatim, since that is what the vendor sends and the device accepts.
+
 ### Keys and macros — `0x08`
 
 `SetMouseKeyMacroData(int key, int profile) @ 0x34930` builds:
@@ -375,13 +414,10 @@ written as `0`, its vendor default.
 00 08 00 01 (n*4+2) key  r0 r1 r2 r3  r4 r5 r6 r7 ...
 ```
 
-`n` is the record count, capped at 6 by `GetMouseMacroData`. A keyboard record
-is encoded `[0x30][0x01][0x00][flash_key_code]`, with a `[0x20]` variant for
-modifiers; delays pack into the middle bytes.
-
-`0x09` is the "set all buttons" variant, built from a 3-byte per-key table. The
-surrounding glue was not decoded far enough to be confident, so this page sends
-`0x08` per key instead.
+`n` is the record count, capped at 6 by `GetMouseMacroData`. Keyboard records
+are encoded `[0x30][0x01][0x00][flash_key_code]`, with a `[0x20]` variant for
+modifiers; delays pack into the middle bytes. This is the per-key / macro path;
+the simple bindings use `0x09` above.
 
 ### Reset / factory
 

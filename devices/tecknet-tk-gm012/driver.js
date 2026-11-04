@@ -54,11 +54,33 @@ const CMD = {
   DPI_COLOR: 0x04,
   POWER: 0x07,
   KEY_ONE: 0x08,
+  KEY_ALL: 0x09,
   LIGHT_RESET: 0x0E,
   FACTORY: 0x0F
 };
 
-const RATE_CODES = { 125: 1, 250: 2, 500: 3, 1000: 4 };
+const RATE_CODES = { 1000: 1, 500: 2, 250: 4, 125: 8 };
+
+/* DPI is not sent as a raw value. GetMouseDPIValue @ 0x1D740 compresses it:
+ *
+ *   dpi <= 10000         -> dpi / 50
+ *   10000 < dpi < 13000  -> 200 + (dpi - 10000) / 100
+ *   dpi >= 13000         -> 221 + (dpi - 13000) / 1000
+ *
+ * 1100 -> 22 (0x16), 24000 -> 232 (0xE8); both confirmed against captures
+ * from the vendor tool. */
+function encodeDpi(dpi) {
+  const v = Math.max(50, Math.min(24000, Math.round(dpi)));
+  if (v <= 10000) return Math.floor(v / 50);
+  if (v < 13000) return 200 + Math.floor((v - 10000) / 100);
+  return 221 + Math.floor((v - 13000) / 1000);
+}
+
+function decodeDpi(code) {
+  if (code <= 200) return code * 50;
+  if (code <= 220) return 10000 + (code - 200) * 100;
+  return 13000 + (code - 221) * 1000;
+}
 
 /* <mouse_key> from the device XML. `value` is key_value, i.e. the index the
    firmware expects — note 204/205 are swapped relative to visual order. */
@@ -87,10 +109,24 @@ const KEY_ACTIONS = [
   "Sensitivity", "DPI Loop", "Disable Key", "Keyboard"
 ];
 
-/* Keyboard records are the only key record type decoded so far. */
-const ACTION_KEYCODE = {
-  "Enter": 0x1C, "Space": 0x39, "Copy": 0x2E, "Paste": 0x2F,
-  "Cut": 0x2D, "Undo": 0x2C
+/* Wire records for command 0x09, three bytes each, verified against captures:
+   mouse buttons are HID button bits, media actions use the consumer usage.
+   Record index is key_value, not visual order. */
+const KEY_RECORDS = {
+  "Left-Click":  [0x10, 0x01, 0x00],
+  "Right-Click": [0x10, 0x02, 0x00],
+  "Middle-Click": [0x10, 0x04, 0x00],
+  "Backward":    [0x10, 0x08, 0x00],
+  "Forward":     [0x10, 0x10, 0x00],
+  "Volume +":    [0x80, 0xE9, 0x00],
+  "Volume -":    [0x80, 0xEA, 0x00],
+  "Mute":        [0x80, 0xE2, 0x00],
+  "Play/Pause":  [0x80, 0xCD, 0x00],
+  "Next":        [0x80, 0xB5, 0x00],
+  "Previous":    [0x80, 0xB6, 0x00],
+  "Stop":        [0x80, 0xB7, 0x00],
+  "DPI Loop":    [0x40, 0x01, 0x00],
+  "Disable Key": [0x60, 0x00, 0x00]
 };
 
 const DEFAULTS = {
@@ -103,7 +139,7 @@ const DEFAULTS = {
     { value: 6400,  color: "#FE1966" },
     { value: 12000, color: "#FF4400" }
   ],
-  rate: 125,          // report_rate default_value="1"
+  rate: 1000,         // report_rate default_value="1" == 1000 Hz (code 1)
   sleep: 180,         // sleep_light value="180"
   moveWake: false,    // move_wakeup value="0"
   keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"]
@@ -270,15 +306,12 @@ async function applyRate() {
 async function applyDpi() {
   const payload = new Array(25).fill(0);
   for (let i = 0; i < 6; i++) {
-    const stage = state.dpi[i];
+    const code = encodeDpi(state.dpi[i].value);
     const base = 1 + i * 4;                    // payload[0] stays zero
-    payload[base] = stage.value & 0xFF;
-    payload[base + 1] = (stage.value >> 8) & 0xFF;
-    const rgb565 = ((parseInt(stage.color.slice(1, 3), 16) >> 3) << 11) |
-                   ((parseInt(stage.color.slice(3, 5), 16) >> 2) << 5) |
-                   (parseInt(stage.color.slice(5, 7), 16) >> 3);
-    payload[base + 2] = rgb565 & 0xFF;
-    payload[base + 3] = (rgb565 >> 8) & 0xFF;
+    payload[base] = code & 0xFF;
+    payload[base + 1] = (code >> 8) & 0xFF;
+    payload[base + 2] = code & 0xFF;           // Y axis carries the same code
+    payload[base + 3] = (code >> 8) & 0xFF;
   }
   return sendCommand(CMD.DPI, payload, 0x25);
 }
@@ -301,11 +334,20 @@ async function applyPower() {
                      [state.sleep, 0, state.moveWake ? 1 : 0, 0], 4);
 }
 
-async function applyKey(index) {
-  const keyCode = ACTION_KEYCODE[state.keys[index]];
-  if (keyCode === undefined) return { ok: false, error: "not encodable" };
-  return sendCommand(CMD.KEY_ONE,
-                     [KEYS[index].value, 0x30, 0x01, 0x00, keyCode], 6);
+/* Command 0x09 carries all six bindings as 3-byte records, ordered by
+   key_value. Verified against captures: key 204 (key_value 4) lands in record
+   4, key 205 (key_value 3) in record 3. The vendor sends a length byte of 0x0f
+   even though six records follow, so that constant is copied verbatim. */
+async function applyKeys() {
+  const records = new Array(6);
+  for (let i = 0; i < KEYS.length; i++) {
+    const record = KEY_RECORDS[state.keys[i]];
+    if (!record) return { ok: false, error: `"${state.keys[i]}" is not encodable` };
+    records[KEYS[i].value] = record;
+  }
+  const payload = [];
+  for (const record of records) payload.push(...record);
+  return sendCommand(CMD.KEY_ALL, payload, 0x0F);
 }
 
 async function resetIndicator() {
@@ -1018,15 +1060,10 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-save-profile")?.addEventListener("click", saveProfile);
 
   $("btn-apply-keys")?.addEventListener("click", async () => {
-    if (!confirm("Button remap encoding is only partially recovered. Write anyway?")) return;
-    let sent = 0;
-    for (let i = 0; i < KEYS.length; i++) {
-      const res = await applyKey(i);
-      if (res.ok) sent++;
-      await delay(40);
-    }
+    const res = await applyKeys();
     updateDiagnostics();
-    showToast(`${sent} of ${KEYS.length} keys written (experimental)`);
+    if (!res.ok) return showToast(res.error || "Key write failed");
+    showToast(res.silent ? "Keys sent (no ack)" : "Keys written");
   });
 
   window.addEventListener("keydown", macroKeyHook);
