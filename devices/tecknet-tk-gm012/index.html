@@ -19,12 +19,12 @@
       <div class="nav-section-title">ACTIVE HARDWARE</div>
       <div class="nav-item active font-impact" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">BUTTONS</div>
       <div class="nav-item font-impact" id="nav-tab-performance" onclick="switchTab('tab-performance')">PERFORMANCE</div>
-      <div class="nav-item font-impact" id="nav-tab-lighting" onclick="switchTab('tab-lighting')">LIGHTING</div>
       <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER / SENSOR</div>
       <div class="nav-item font-impact" id="nav-tab-macro" onclick="switchTab('tab-macro')">MACRO</div>
       <div class="nav-item font-impact" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">PROFILES</div>
 
       <div class="nav-section-title">REFERENCE</div>
+      <div class="nav-item font-impact" id="nav-tab-diagnostics" onclick="switchTab('tab-diagnostics')">DIAGNOSTICS</div>
       <div class="nav-item font-impact" onclick="window.open('PROTOCOL.md','_blank')">PROTOCOL NOTES</div>
     </div>
 
@@ -185,6 +185,16 @@
                 <span class="val-badge" id="lbl-dpi">800</span>
                 <input type="color" id="inp-dpi-color" class="color-chip" value="#00ff00">
               </div>
+
+              <div class="section-actions">
+                <button class="btn-ghost font-impact" id="btn-reset-led" type="button">RESET INDICATOR LED</button>
+              </div>
+
+              <p class="section-note">
+                This model has one LED: the DPI indicator under the wheel. It shows the
+                colour assigned to the active stage; there is no lighting zone to drive.
+                The vendor XML agrees — <code>&lt;menu light="0"/&gt;</code>.
+              </p>
             </div>
 
             <div class="panel-section">
@@ -195,49 +205,6 @@
                 <button class="seg-btn" data-rate="250" type="button">250 HZ</button>
                 <button class="seg-btn" data-rate="500" type="button">500 HZ</button>
                 <button class="seg-btn active" data-rate="1000" type="button">1000 HZ</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- LIGHTING -->
-          <div class="tab-panel" id="tab-lighting">
-            <div class="panel-section">
-              <div class="section-title font-impact">LIGHT MODE</div>
-              <div class="section-desc">Six firmware modes. Preview updates live, apply writes to the mouse.</div>
-              <div class="lighting-grid" id="lighting-grid"></div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Brightness</div>
-                  <div class="form-hint">Packed into the high nibble of the lighting payload.</div>
-                </div>
-                <div class="slider-wrap">
-                  <input type="range" id="rng-brightness" min="0" max="15" value="8">
-                  <span class="val-badge" id="lbl-brightness">8</span>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Speed</div>
-                  <div class="form-hint">Animation rate, 0 (slowest) to 15 (fastest).</div>
-                </div>
-                <div class="slider-wrap">
-                  <input type="range" id="rng-speed" min="0" max="15" value="5">
-                  <span class="val-badge" id="lbl-speed">5</span>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Colour</div>
-                  <div class="form-hint">Used by the steady and neon modes.</div>
-                </div>
-                <input type="color" id="inp-light-color" class="color-chip" value="#2ee6c5">
-              </div>
-
-              <div class="section-actions">
-                <button class="btn-ghost font-impact" id="btn-reset-light" type="button">RESET LIGHTING</button>
               </div>
             </div>
           </div>
@@ -360,6 +327,38 @@
               </div>
 
               <div class="profile-list" id="profile-list"></div>
+            </div>
+          </div>
+
+          <!-- DIAGNOSTICS -->
+          <div class="tab-panel" id="tab-diagnostics">
+            <div class="panel-section">
+              <div class="section-title font-impact">CONNECTION</div>
+              <div class="section-desc">The firmware only answers on one HID collection. If the
+                interface line below is red, close the vendor utility and re-pair.</div>
+
+              <div class="diag-grid">
+                <div class="diag-cell"><span class="diag-label">PRODUCT</span><span id="diag-product">—</span></div>
+                <div class="diag-cell"><span class="diag-label">VID : PID</span><span id="diag-ids">—</span></div>
+                <div class="diag-cell"><span class="diag-label">INTERFACE</span><span id="diag-interface">—</span></div>
+                <div class="diag-cell"><span class="diag-label">LAST COMMAND</span><span id="diag-last">—</span></div>
+                <div class="diag-cell"><span class="diag-label">LAST ERROR</span><span id="diag-error">—</span></div>
+              </div>
+
+              <div class="diag-subtitle">COLLECTIONS</div>
+              <div class="diag-list" id="diag-collections"></div>
+
+              <div class="section-actions">
+                <button class="btn-ghost font-impact" id="btn-test" type="button">SEND TEST FRAME</button>
+                <button class="btn-ghost font-impact" id="btn-pair-any" type="button">SHOW ALL INTERFACES</button>
+              </div>
+
+              <p class="section-note">
+                <code>DriverComm::FindDevice</code> only accepts interfaces whose
+                <code>usage_page</code> is <code>0xFFEF</code> and whose
+                <code>usage</code> is <code>0</code>. Picking the boot mouse or keyboard
+                collection instead makes every write disappear without an error.
+              </p>
             </div>
           </div>
 

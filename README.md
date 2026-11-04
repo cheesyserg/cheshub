@@ -26,12 +26,17 @@ configure it. No install, no admin rights, no background service.
 USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 
 - Button mapping for all six keys
-- Six DPI stages (50–24000) with per-stage LED colour
+- Six DPI stages (50–24000) with per-stage indicator colour
 - Report rate 125 / 250 / 500 / 1000 Hz
-- Six lighting modes, brightness, speed, colour
 - Sleep timeout, move wake-up, idle light-off
 - Lift-off distance and sensor options
 - Macro recorder, named profile slots, factory restore
+
+The only LED on this model is the DPI indicator under the wheel, so the studio
+has no lighting page — the API exposes the colour per DPI stage instead. The
+mouse answers on usage page `0xFFEF`, usage `0x00`; writes sent to the boot
+mouse collection are silently dropped, which is why the studio pins that
+collection in its pairing filter.
 
 The wire protocol was reverse-engineered from the vendor tool and is documented
 in [`devices/tecknet-tk-gm012/PROTOCOL.md`](devices/tecknet-tk-gm012/PROTOCOL.md),
@@ -143,9 +148,11 @@ icon included) and reload. On Linux, check `lsusb` and that nothing like
 `libratbag` grabbed the device.
 
 **The prompt shows the device but writes fail**
-Devices expose several HID collections. The configurable one is normally the
-vendor collection (`MI_02`, usage page `0xFF00`–`0xFFFF`), not the standard
-mouse/keyboard interfaces.
+Devices expose several HID collections. The controllable one is normally the
+vendor collection (`MI_02`, usage page `0xFF00`–`0xFFFF`) rather than the
+standard mouse or keyboard interface. The TK-GM012 studio shows the collection
+it bound to under **DIAGNOSTICS**, and the firmware only answers on usage page
+`0xFFEF` / usage `0x00`.
 
 **Settings reset after unplugging**
 Some firmware keeps settings in RAM until a save command is sent. Re-apply, or

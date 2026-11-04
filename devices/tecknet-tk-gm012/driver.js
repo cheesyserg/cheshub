@@ -1,23 +1,39 @@
 /* TECKNET TK-GM012 — ChesHub driver
  *
- * Protocol recovered from the vendor tool; see PROTOCOL.md for the evidence
- * behind every byte. Frame layout (verified):
+ * Protocol recovered from the vendor tool; see PROTOCOL.md.
  *
+ * Frame (verified):
  *   [0] report id 0x00   [1] command   [2] 0x00   [3] 0x01
  *   [4] length/type      [5..31] payload
  *   [32] checksum = sum(5..31) & 0xFF
+ *
+ * The vendor binds to one specific HID collection: DriverComm::FindDevice at
+ * 0x4C3A0 rejects every interface whose hid_device_info.usage_page is not
+ * 0xFFEF, or whose usage is not 0. Pairing the boot mouse/keyboard collection
+ * instead produces writes that are silently ignored, so the filter below is
+ * intentionally narrow.
  */
 
+const VENDOR_USAGE_PAGE = 0xFFEF;
+const VENDOR_USAGE = 0x00;
+
+const WIRED = { vendorId: 0x248A, productId: 0x5D2E };
+const WIRELESS = { vendorId: 0x249A, productId: 0x5C2F };
+
+/* Preferred: only the vendor collection the firmware answers on. */
 const FILTERS = [
-  { vendorId: 0x248A, productId: 0x5D2E },  // USB wired
-  { vendorId: 0x249A, productId: 0x5C2F }   // 2.4 GHz dongle
+  { ...WIRED, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE },
+  { ...WIRELESS, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE }
 ];
+
+/* Fallback for the "show all interfaces" button, when a unit exposes the
+   vendor page differently. */
+const FILTERS_ANY = [WIRED, WIRELESS];
 
 const CMD = {
   RATE: 0x02,
   DPI: 0x03,
   DPI_COLOR: 0x04,
-  LIGHT: 0x05,
   SENSOR: 0x06,
   POWER: 0x07,
   KEY_ONE: 0x08,
@@ -35,20 +51,12 @@ const KEY_ACTIONS = [
   "Copy", "Paste", "Cut", "Undo", "Enter", "Space", "Disabled"
 ];
 
-/* Mode index -> payload shape. Indices and shapes come straight from the
-   branch table in SetLightModeData @ 0x34B80:
-     0 -> 2 bytes, 1 -> 3 bytes, 2 -> 0x18 bytes, 3 -> 5 bytes,
-     4 -> 2 bytes, 5 -> 2 bytes */
-const LIGHT_MODES = [
-  { id: "flow",    label: "Flow",         desc: "Cascading colour sweep",     shape: 2,    mode: 0 },
-  { id: "breath",  label: "Breathing",    desc: "Slow pulse",                 shape: 3,    mode: 1 },
-  { id: "steady",  label: "Steady",       desc: "Per-zone constant colour",   shape: 0x18, mode: 2 },
-  { id: "neon",    label: "Neon",         desc: "Hard colour cycling",        shape: 5,    mode: 3 },
-  { id: "wave",    label: "Rainbow Wave", desc: "Full spectrum sweep",        shape: 2,    mode: 4 },
-  { id: "off",     label: "Off",          desc: "LEDs disabled",              shape: 2,    mode: 5 }
-];
-
-const SLEEP_OPTIONS = [1, 5, 10, 15, 30, 60, 180];
+/* Confirmed scancodes. Mouse actions use a record type that was not decoded,
+   so only these are encodable today. */
+const ACTION_KEYCODE = {
+  "Enter": 0x1C, "Space": 0x39, "Copy": 0x2E, "Paste": 0x2F,
+  "Cut": 0x2D, "Undo": 0x2C
+};
 
 const DEFAULTS = {
   dpiCount: 6,
@@ -67,16 +75,14 @@ const DEFAULTS = {
   lod: 1,
   sensorA: true,
   sensorB: false,
-  lightMode: "breath",
-  brightness: 8,
-  speed: 5,
-  lightColor: "#2ee6c5",
   keys: ["Left Click", "Right Click", "Middle Click", "Volume +", "Volume -", "DPI Loop"]
 };
 
 let state = structuredClone(DEFAULTS);
 let hidDevice = null;
 let pending = null;
+let lastWriteError = "";
+let lastResult = "—";
 let selectedStage = 0;
 let macroSteps = [];
 let recording = false;
@@ -100,29 +106,59 @@ function buildReport(cmd, payload, lenByte) {
   frame[4] = lenByte === undefined ? payload.length : lenByte;
   for (let i = 0; i < payload.length && i < 27; i++) frame[5 + i] = payload[i] & 0xFF;
   frame[32] = checksum(frame);
-  return frame.slice(1);           // 64-byte report, id 0
+  return frame.slice(1);           // 64-byte report, report id 0
 }
 
-/* Writes a report and resolves with the first input report seen, or null. */
-function sendCommand(cmd, payload, lenByte, timeoutMs = 400) {
+function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+/* One write, then wait briefly for an input report. Resolves with the reply
+   bytes or null. */
+function writeAndWait(report, timeoutMs) {
   return new Promise(async (resolve) => {
-    if (!hidDevice || !hidDevice.opened) return resolve(null);
-    const done = (data) => {
+    let timer = null;
+    const settle = (data) => {
       clearTimeout(timer);
-      pending = null;
+      if (pending === settle) pending = null;
       resolve(data);
     };
-    pending = done;
-    const timer = setTimeout(() => { if (pending) done(null); }, timeoutMs);
+    pending = settle;
+    timer = setTimeout(() => settle(null), timeoutMs);
     try {
-      await hidDevice.sendReport(0, buildReport(cmd, payload, lenByte));
+      await hidDevice.sendReport(0, report);
     } catch (err) {
-      done(null);
+      lastWriteError = err && err.message ? err.message : String(err);
+      settle(null);
     }
   });
 }
 
-function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
+/* The vendor tool sends, waits 30 ms, retries once, then gives up. Some units
+   never acknowledge; that is reported as "sent, no ack" rather than failure. */
+async function sendCommand(cmd, payload, lenByte, opts = {}) {
+  const timeoutMs = opts.timeoutMs || 120;
+  const attempts = opts.attempts || 2;
+  if (!hidDevice || !hidDevice.opened) {
+    lastResult = "not connected";
+    return { ok: false, error: "not connected" };
+  }
+  const report = buildReport(cmd, payload, lenByte);
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const reply = await writeAndWait(report, timeoutMs);
+    if (reply) {
+      const head = Array.from(reply.slice(0, 8))
+        .map((b) => b.toString(16).padStart(2, "0")).join(" ");
+      lastResult = `0x${cmd.toString(16)} → ${reply.length} B [${head}]`;
+      return { ok: true, reply };
+    }
+    if (lastWriteError) {
+      lastResult = `cmd 0x${cmd.toString(16)} → write error`;
+      return { ok: false, error: lastWriteError };
+    }
+    if (attempt + 1 < attempts) await delay(10);
+  }
+  lastResult = `cmd 0x${cmd.toString(16)} → no ack`;
+  return { ok: true, silent: true };
+}
 
 /* -------------------------------------------------------------------- apply */
 
@@ -134,7 +170,7 @@ async function applyDpi() {
   const payload = new Array(25).fill(0);
   for (let i = 0; i < 6; i++) {
     const stage = state.dpi[i];
-    const base = 1 + i * 4;                    // payload[0] is left zero
+    const base = 1 + i * 4;                    // payload[0] stays zero
     payload[base] = stage.value & 0xFF;
     payload[base + 1] = (stage.value >> 8) & 0xFF;
     const rgb565 = ((parseInt(stage.color.slice(1, 3), 16) >> 3) << 11) |
@@ -157,62 +193,24 @@ async function applyDpiColors() {
   return sendCommand(CMD.DPI_COLOR, payload, 0x12);
 }
 
-async function applyLighting() {
-  const preset = LIGHT_MODES.find((m) => m.id === state.lightMode) || LIGHT_MODES[0];
-  const packed = ((state.brightness & 0x0F) << 4) | (state.speed & 0x0F);
-  const payload = [preset.mode, packed];
-
-  if (preset.shape === 3) {
-    payload.push(state.speed & 0x0F);
-  } else if (preset.shape === 5) {
-    const hex = state.lightColor;
-    payload.push(parseInt(hex.slice(1, 3), 16),
-                 parseInt(hex.slice(3, 5), 16),
-                 parseInt(hex.slice(5, 7), 16));
-  } else if (preset.shape === 0x18) {
-    // [mode][packed][count=7] then seven RGB triples (the vendor fills all
-    // seven from the configured colours; a 6-mode mouse simply repeats one).
-    const hex = state.lightColor;
-    const rgb = [parseInt(hex.slice(1, 3), 16),
-                 parseInt(hex.slice(3, 5), 16),
-                 parseInt(hex.slice(5, 7), 16)];
-    payload.push(7);
-    for (let i = 0; i < 7; i++) payload.push(rgb[0], rgb[1], rgb[2]);
-  }
-  return sendCommand(CMD.LIGHT, payload, preset.shape);
-}
-
 async function applySensor() {
   const flags = (state.sensorA ? 8 : 0) | (state.sensorB ? 4 : 0);
-  return sendCommand(CMD.SENSOR, [state.lod, (flags & 8) ? 1 : 0, (flags & 4) ? 1 : 0], 5);
+  return sendCommand(CMD.SENSOR,
+                     [state.lod, (flags & 8) ? 1 : 0, (flags & 4) ? 1 : 0], 5);
 }
 
 async function applyPower() {
-  return sendCommand(CMD.POWER, [
-    state.sleep,
-    0,
-    state.moveWake ? 1 : 0,
-    state.closeLight ? 1 : 0
-  ], 4);
+  return sendCommand(CMD.POWER,
+                     [state.sleep, 0, state.moveWake ? 1 : 0, state.closeLight ? 1 : 0], 4);
 }
 
-/* Button remap: 0x08 carries [key] followed by 4-byte records. The record
-   encoding for keyboard keys is confirmed ([0x30][0x01][0x00][code]); mouse
-   actions were not decoded, so this is gated behind the experimental toggle. */
 async function applyKey(index) {
-  const action = state.keys[index];
-  const keyCode = ACTION_KEYCODE[action];
-  if (keyCode === undefined) return null;
+  const keyCode = ACTION_KEYCODE[state.keys[index]];
+  if (keyCode === undefined) return { ok: false, error: "not encodable" };
   return sendCommand(CMD.KEY_ONE, [index, 0x30, 0x01, 0x00, keyCode], 6);
 }
 
-/* Only the keys whose scancode is known are encodable. */
-const ACTION_KEYCODE = {
-  "Enter": 0x1C, "Space": 0x39, "Copy": 0x2E, "Paste": 0x2F,
-  "Cut": 0x2D, "Undo": 0x2C
-};
-
-async function resetLighting() {
+async function resetIndicator() {
   return sendCommand(CMD.LIGHT_RESET, [0x01], 1);
 }
 
@@ -223,20 +221,24 @@ async function restoreFactory() {
 async function applyAll() {
   if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
   setBusy(true);
-  const send = await applyRate();
-  await delay(40);
-  await applyDpi();
-  await delay(40);
-  await applyDpiColors();
-  await delay(40);
-  await applyLighting();
-  await delay(40);
-  await applySensor();
-  await delay(40);
-  await applyPower();
+  const results = [];
+  results.push(await applyRate());   await delay(40);
+  results.push(await applyDpi());    await delay(40);
+  results.push(await applyDpiColors()); await delay(40);
+  results.push(await applySensor()); await delay(40);
+  results.push(await applyPower());
   setBusy(false);
+  updateDiagnostics();
   saveState();
-  showToast(send ? "Configuration written" : "Device did not answer");
+
+  const errors = results.filter((r) => !r.ok);
+  if (errors.length) {
+    showToast(errors[0].error || "Write failed");
+  } else if (results.some((r) => r.silent)) {
+    showToast("Sent — device did not acknowledge");
+  } else {
+    showToast("Configuration written");
+  }
 }
 
 function setBusy(busy) {
@@ -245,11 +247,16 @@ function setBusy(busy) {
 
 /* ------------------------------------------------------------------ connect */
 
-async function connect() {
+async function requestPair(anyInterface) {
   if (!navigator.hid) return showToast("WebHID unavailable — use Chrome or Edge");
   try {
-    const devices = await navigator.hid.requestDevice({ filters: FILTERS });
+    const devices = await navigator.hid.requestDevice({
+      filters: anyInterface ? FILTERS_ANY : FILTERS
+    });
     if (!devices.length) return;
+    if (hidDevice && hidDevice !== devices[0]) {
+      try { await hidDevice.close(); } catch (err) { /* already gone */ }
+    }
     await attach(devices[0], true);
   } catch (err) {
     showToast("Pairing cancelled");
@@ -258,26 +265,53 @@ async function connect() {
 
 async function attach(device, announce) {
   hidDevice = device;
-  if (!hidDevice.opened) await hidDevice.open();
+  lastWriteError = "";
+  if (!hidDevice.opened) {
+    try {
+      await hidDevice.open();
+    } catch (err) {
+      lastWriteError = err && err.message ? err.message : String(err);
+      showToast("Could not open the interface");
+      updateDiagnostics();
+      return;
+    }
+  }
   hidDevice.oninputreport = (event) => {
-    const data = new Uint8Array(event.data.buffer);
-    if (pending) pending(data);
+    if (pending) pending(new Uint8Array(event.data.buffer));
   };
   updateHud();
-  if (announce) showToast("Connected to TK-GM012");
+  updateDiagnostics();
+  if (announce) {
+    if (isVendorCollection(device)) showToast("Connected to TK-GM012");
+    else showToast("Wrong interface — see DIAGNOSTICS");
+  }
+}
+
+function isVendorCollection(device) {
+  return (device.collections || []).some(
+    (c) => c.usagePage === VENDOR_USAGE_PAGE && c.usage === VENDOR_USAGE);
 }
 
 async function autoConnect() {
   if (!navigator.hid) return;
   try {
     const paired = await navigator.hid.getDevices();
-    const match = paired.find((d) =>
-      FILTERS.some((f) => f.vendorId === d.vendorId && f.productId === d.productId));
-    if (match) await attach(match, false);
+    const ours = paired.filter((d) =>
+      [WIRED, WIRELESS].some((f) => f.vendorId === d.vendorId && f.productId === d.productId));
+    const good = ours.find(isVendorCollection);
+    if (good) {
+      await attach(good, false);
+    } else if (ours.length) {
+      // An earlier grant bound the boot mouse/keyboard collection. Attaching to
+      // it would silently swallow every write, so ask for a fresh pairing.
+      showToast("Re-pair the mouse — the saved permission bound the wrong interface");
+    }
   } catch (err) {
     /* ignore */
   }
 }
+
+/* -------------------------------------------------------------- diagnostics */
 
 function updateHud() {
   const online = !!(hidDevice && hidDevice.opened);
@@ -288,10 +322,58 @@ function updateHud() {
   if (status) status.textContent = online ? "ONLINE" : "STANDBY";
   if (mode) {
     if (!online || !hidDevice) mode.textContent = "NONE";
-    else mode.textContent = hidDevice.vendorId === 0x249A ? "2.4G WIRELESS" : "USB WIRED";
+    else mode.textContent = hidDevice.vendorId === WIRELESS.vendorId ? "2.4G WIRELESS" : "USB WIRED";
   }
   const bat = $("hud-battery-text");
   if (bat) bat.textContent = online ? "N/A" : "--%";
+}
+
+function updateDiagnostics() {
+  const set = (id, text, cls) => {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove("ok", "bad");
+    if (cls) el.classList.add(cls);
+  };
+
+  if (!hidDevice) {
+    set("diag-product", "not connected");
+    set("diag-ids", "—");
+    set("diag-interface", "—");
+    set("diag-last", lastResult);
+    set("diag-error", lastWriteError || "—");
+    const list = $("diag-collections");
+    if (list) list.innerHTML = `<div class="macro-empty">No device open</div>`;
+    return;
+  }
+
+  const vendor = isVendorCollection(hidDevice);
+  set("diag-product", hidDevice.productName || "(unnamed)");
+  set("diag-ids", `0x${hidDevice.vendorId.toString(16).toUpperCase()} : 0x${hidDevice.productId.toString(16).toUpperCase()}`);
+  set("diag-interface",
+      vendor ? `0x${VENDOR_USAGE_PAGE.toString(16).toUpperCase()} / 0x00 vendor collection`
+             : "wrong collection — re-pair",
+      vendor ? "ok" : "bad");
+  set("diag-last", lastResult);
+  set("diag-error", lastWriteError || "—", lastWriteError ? "bad" : "");
+
+  const list = $("diag-collections");
+  if (list) {
+    const rows = (hidDevice.collections || []).flatMap((c) =>
+      (c.inputReports.size || c.outputReports.size || c.featureReports.size)
+        ? [`<div class="diag-row">
+             <span>usage page</span>
+             <code>0x${c.usagePage.toString(16).toUpperCase()}</code>
+             <span>usage</span>
+             <code>0x${c.usage.toString(16).toUpperCase()}</code>
+             <span class="diag-flag ${c.usagePage === VENDOR_USAGE_PAGE && c.usage === VENDOR_USAGE ? "ok" : ""}">
+               ${c.outputReports.size} out</span>
+           </div>`]
+        : []);
+    list.innerHTML = rows.length ? rows.join("")
+      : `<div class="macro-empty">No report collections exposed</div>`;
+  }
 }
 
 /* ---------------------------------------------------------------------- UI */
@@ -303,7 +385,7 @@ function showToast(message) {
   toast.className = "toast";
   toast.textContent = message;
   container.appendChild(toast);
-  setTimeout(() => toast.remove(), 2600);
+  setTimeout(() => toast.remove(), 2800);
 }
 
 function switchTab(tabId) {
@@ -348,8 +430,19 @@ function buildDpiCards() {
       selectedStage = Number(card.dataset.stage);
       buildDpiCards();
       syncDpiControls();
+      updateStageLed();
     };
   });
+}
+
+/* The only LED on this mouse: the DPI indicator under the wheel. It shows the
+   colour of the stage selected for that DPI slot. */
+function updateStageLed() {
+  const led = $("live-led");
+  if (!led) return;
+  const color = state.dpi[selectedStage].color;
+  led.style.backgroundColor = color;
+  led.style.boxShadow = `0 0 4px #fff, 0 0 10px ${color}, 0 0 20px ${color}`;
 }
 
 function syncDpiControls() {
@@ -361,39 +454,6 @@ function syncDpiControls() {
   if (color) color.value = state.dpi[selectedStage].color;
   const count = $("sel-dpi-count");
   if (count) count.value = state.dpiCount;
-}
-
-function buildLightCards() {
-  const grid = $("lighting-grid");
-  if (!grid) return;
-  grid.innerHTML = LIGHT_MODES.map((mode) => `
-    <button class="light-card${mode.id === state.lightMode ? " active" : ""}"
-            data-mode="${mode.id}" type="button">
-      <span class="light-preview ${mode.id}"></span>
-      <span class="light-name">${mode.label}</span>
-      <span class="light-desc">${mode.desc}</span>
-    </button>`).join("");
-
-  grid.querySelectorAll(".light-card").forEach((card) => {
-    card.onclick = () => {
-      state.lightMode = card.dataset.mode;
-      buildLightCards();
-      previewLighting();
-      saveState();
-    };
-  });
-}
-
-function previewLighting() {
-  const led = $("live-led");
-  if (!led) return;
-  const preset = LIGHT_MODES.find((m) => m.id === state.lightMode) || LIGHT_MODES[0];
-  led.className = "dpi-slit-led " + preset.id;
-  if (preset.shape === 2 || preset.shape === 3) {
-    led.style.backgroundColor = state.lightMode === "off" ? "transparent" : state.lightColor;
-  } else {
-    led.style.backgroundColor = state.lightColor;
-  }
 }
 
 function buildMacroList() {
@@ -454,14 +514,16 @@ function refreshUI() {
   buildKeySelects();
   buildDpiCards();
   syncDpiControls();
-  buildLightCards();
-  previewLighting();
+  updateStageLed();
   buildMacroList();
   buildProfiles();
 
-  const rate = document.querySelector(`#rate-control .seg-btn[data-rate="${state.rate}"]`);
-  document.querySelectorAll("#rate-control .seg-btn").forEach((b) => b.classList.remove("active"));
-  if (rate) rate.classList.add("active");
+  document.querySelectorAll("#rate-control .seg-btn").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.rate) === state.rate);
+  });
+  document.querySelectorAll("#lod-control .seg-btn").forEach((b) => {
+    b.classList.toggle("active", Number(b.dataset.lod) === state.lod);
+  });
 
   const sleep = $("sel-sleep");
   if (sleep) sleep.value = String(state.sleep);
@@ -469,17 +531,6 @@ function refreshUI() {
   if (wake) wake.checked = state.moveWake;
   const close = $("chk-closelight");
   if (close) close.checked = state.closeLight;
-  const bright = $("rng-brightness");
-  if (bright) { bright.value = state.brightness; $("lbl-brightness").textContent = state.brightness; }
-  const speed = $("rng-speed");
-  if (speed) { speed.value = state.speed; $("lbl-speed").textContent = state.speed; }
-  const color = $("inp-light-color");
-  if (color) color.value = state.lightColor;
-  const lod = document.querySelector(`#lod-control .seg-btn[data-lod="${state.lod}"]`);
-  if (lod) {
-    document.querySelectorAll("#lod-control .seg-btn").forEach((b) => b.classList.remove("active"));
-    lod.classList.add("active");
-  }
   const sensorA = $("chk-sensor-a");
   if (sensorA) sensorA.checked = state.sensorA;
   const sensorB = $("chk-sensor-b");
@@ -535,7 +586,7 @@ function startRecording() {
   buildMacroList();
   const btn = $("btn-record");
   if (btn) btn.classList.add("recording");
-  showToast("Recording — press keys, click STOP to finish");
+  showToast("Recording — Esc to stop");
 }
 
 function stopRecording() {
@@ -565,22 +616,27 @@ function macroKeyHook(event) {
 document.addEventListener("DOMContentLoaded", () => {
   restoreState();
   refreshUI();
+  updateHud();
+  updateDiagnostics();
   autoConnect();
 
   navigator.hid?.addEventListener("connect", autoConnect);
   navigator.hid?.addEventListener("disconnect", () => {
     hidDevice = null;
     updateHud();
+    updateDiagnostics();
     showToast("Device disconnected");
   });
 
   $("btn-connect")?.addEventListener("click", () => {
     if (hidDevice && hidDevice.opened) applyAll();
-    else connect();
+    else requestPair(false);
   });
+  $("btn-pair-any")?.addEventListener("click", () => requestPair(true));
 
   $("btn-sync")?.addEventListener("click", () => {
     refreshUI();
+    updateDiagnostics();
     showToast("Loaded saved profile");
   });
 
@@ -591,9 +647,10 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast("Keys reset to defaults");
   });
 
-  $("btn-reset-light")?.addEventListener("click", async () => {
-    const res = await resetLighting();
-    showToast(res ? "Lighting reset" : "No response");
+  $("btn-reset-led")?.addEventListener("click", async () => {
+    const res = await resetIndicator();
+    updateDiagnostics();
+    showToast(res.ok ? "Indicator reset" : (res.error || "No response"));
   });
 
   $("btn-factory")?.addEventListener("click", async () => {
@@ -602,27 +659,29 @@ document.addEventListener("DOMContentLoaded", () => {
     state = structuredClone(DEFAULTS);
     refreshUI();
     saveState();
-    showToast(res ? "Factory defaults restored" : "No response");
+    updateDiagnostics();
+    showToast(res.ok ? "Factory defaults restored" : (res.error || "No response"));
   });
 
   document.querySelectorAll("#rate-control .seg-btn").forEach((btn) => {
     btn.onclick = async () => {
       state.rate = Number(btn.dataset.rate);
-      document.querySelectorAll("#rate-control .seg-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
+      refreshUI();
       saveState();
       const res = await applyRate();
-      showToast(res ? `${state.rate} Hz applied` : "Saved (device not answering)");
+      updateDiagnostics();
+      showToast(res.ok && !res.silent ? `${state.rate} Hz applied`
+        : res.ok ? `${state.rate} Hz sent (no ack)` : (res.error || "Write failed"));
     };
   });
 
   document.querySelectorAll("#lod-control .seg-btn").forEach((btn) => {
     btn.onclick = async () => {
       state.lod = Number(btn.dataset.lod);
-      document.querySelectorAll("#lod-control .seg-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
+      refreshUI();
       saveState();
       await applySensor();
+      updateDiagnostics();
     };
   });
 
@@ -631,11 +690,21 @@ document.addEventListener("DOMContentLoaded", () => {
     $("lbl-dpi").textContent = e.target.value;
     buildDpiCards();
   });
-  $("rng-dpi")?.addEventListener("change", () => { saveState(); applyDpi(); });
+  $("rng-dpi")?.addEventListener("change", async () => {
+    saveState();
+    await applyDpi();
+    updateDiagnostics();
+  });
 
   $("inp-dpi-color")?.addEventListener("input", (e) => {
     state.dpi[selectedStage].color = e.target.value;
     buildDpiCards();
+    updateStageLed();
+  });
+  $("inp-dpi-color")?.addEventListener("change", async () => {
+    saveState();
+    await applyDpiColors();
+    updateDiagnostics();
   });
 
   $("sel-dpi-count")?.addEventListener("change", (e) => {
@@ -643,52 +712,39 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
   });
 
-  $("rng-brightness")?.addEventListener("input", (e) => {
-    state.brightness = Number(e.target.value);
-    $("lbl-brightness").textContent = e.target.value;
-  });
-  $("rng-brightness")?.addEventListener("change", () => { saveState(); applyLighting(); });
-
-  $("rng-speed")?.addEventListener("input", (e) => {
-    state.speed = Number(e.target.value);
-    $("lbl-speed").textContent = e.target.value;
-  });
-  $("rng-speed")?.addEventListener("change", () => { saveState(); applyLighting(); });
-
-  $("inp-light-color")?.addEventListener("input", (e) => {
-    state.lightColor = e.target.value;
-    previewLighting();
-  });
-  $("inp-light-color")?.addEventListener("change", () => { saveState(); applyLighting(); });
-
-  $("sel-sleep")?.addEventListener("change", (e) => {
+  $("sel-sleep")?.addEventListener("change", async (e) => {
     state.sleep = Number(e.target.value);
     saveState();
-    applyPower();
+    await applyPower();
+    updateDiagnostics();
   });
 
-  $("chk-wake")?.addEventListener("change", (e) => {
+  $("chk-wake")?.addEventListener("change", async (e) => {
     state.moveWake = e.target.checked;
     saveState();
-    applyPower();
+    await applyPower();
+    updateDiagnostics();
   });
 
-  $("chk-closelight")?.addEventListener("change", (e) => {
+  $("chk-closelight")?.addEventListener("change", async (e) => {
     state.closeLight = e.target.checked;
     saveState();
-    applyPower();
+    await applyPower();
+    updateDiagnostics();
   });
 
-  $("chk-sensor-a")?.addEventListener("change", (e) => {
+  $("chk-sensor-a")?.addEventListener("change", async (e) => {
     state.sensorA = e.target.checked;
     saveState();
-    applySensor();
+    await applySensor();
+    updateDiagnostics();
   });
 
-  $("chk-sensor-b")?.addEventListener("change", (e) => {
+  $("chk-sensor-b")?.addEventListener("change", async (e) => {
     state.sensorB = e.target.checked;
     saveState();
-    applySensor();
+    await applySensor();
+    updateDiagnostics();
   });
 
   $("btn-record")?.addEventListener("click", () => {
@@ -707,13 +763,26 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   $("btn-save-profile")?.addEventListener("click", saveProfile);
+
   $("btn-apply-keys")?.addEventListener("click", async () => {
     if (!confirm("Button remap encoding is only partially recovered. Write anyway?")) return;
+    let sent = 0;
     for (let i = 0; i < 6; i++) {
-      await applyKey(i);
+      const res = await applyKey(i);
+      if (res.ok) sent++;
       await delay(40);
     }
-    showToast("Key writes sent (experimental)");
+    updateDiagnostics();
+    showToast(`${sent} key writes sent (experimental)`);
+  });
+
+  $("btn-test")?.addEventListener("click", async () => {
+    if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
+    const res = await applyRate();
+    updateDiagnostics();
+    showToast(res.ok
+      ? (res.silent ? "Written — no reply from device" : "Device answered")
+      : (res.error || "Write failed"));
   });
 
   window.addEventListener("keydown", macroKeyHook);

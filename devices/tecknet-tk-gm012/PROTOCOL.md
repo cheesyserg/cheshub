@@ -27,10 +27,27 @@ Enumeration uses SetupAPI (`SetupDiGetClassDevsA`,
 `SetupDiEnumDeviceInterfaces`, `SetupDiEnumDeviceInfo`) and `HID.DLL`
 (`HidD_GetAttributes`, `HidD_GetPreparsedData`, `HidP_GetCaps`).
 
-| Mode | VID | PID | Interface |
-|---|---|---|---|
-| USB wired | `0x248A` | `0x5D2E` | `MI_02` |
-| 2.4 GHz | `0x249A` | `0x5C2F` | `MI_02` |
+| Mode | VID | PID | Interface | Collection |
+|---|---|---|---|---|
+| USB wired | `0x248A` | `0x5D2E` | `MI_02` | usage page `0xFFEF`, usage `0x00` |
+| 2.4 GHz | `0x249A` | `0x5C2F` | `MI_02` | usage page `0xFFEF`, usage `0x00` |
+
+The collection is not optional. `DriverComm::FindDevice @ 0x4C3A0` walks the
+`hid_enumerate()` list and rejects every entry that fails these checks:
+
+```asm
+0004C3C2  mov ecx, ffef
+0004C3C7  movzx eax, [esi+0x4]      ; hid_device_info.vendor_id
+0004C3CB  cmp eax, [ebp+0x8]
+0004C3D4  cmp eax, ebx              ; product_id
+0004C3D8  cmp [esi+0x18], cx        ; usage_page == 0xFFEF
+0004C3DE  cmp [esi+0x1a], 0         ; usage == 0
+```
+
+Pairing the boot mouse or keyboard collection instead produces writes the
+firmware silently ignores — no error, no reply. Trackpad/keyboard interfaces and
+the vendor collection often share the same product name in the browser picker,
+so a `usagePage` filter is the reliable way to select it.
 
 The build uses the `__fastcall` convention (`/Gr`): first two arguments in
 `ECX`/`EDX`. That detail matters when reading the disassembly.
@@ -61,11 +78,11 @@ at 27 bytes; every command below fits.
 | `0x02` | Report rate | `1` | `[rate]`, `1..4` = 125/250/500/1000 Hz | verified |
 | `0x03` | DPI stages | `0x25` | 6 x 4 bytes at `[6..29]` | layout inferred |
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
-| `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | layout inferred |
+| `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified |
 | `0x07` | Power management | `4` | 4 bytes at `[5..8]` | partially verified |
 | `0x08` | Set one key / macro | `n*4+2` | `[5]=key`, then `n` x 4-byte records | verified |
-| `0x0E` | Reset lighting | `1` | `[5]=0x01` | verified |
+| `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
 | `0x0F` | Restore factory | `1` | `[5]=0x01`, `[6]=0xFF` | verified |
 
 The vendor tool logs each command with a `"0xNN: <error>"` string, which is how
@@ -106,9 +123,16 @@ Six RGB triplets, stage 1 first:
 00 04 00 01 12 R1 G1 B1 R2 G2 B2 ... R6 G6 B6
 ```
 
-### Lighting — `0x05` (layout **inferred**)
+### Lighting — `0x05` (present in firmware, **not used by this mouse**)
 
-Byte 4 selects the payload shape:
+This model has exactly one LED: the DPI indicator under the wheel. Its colour is
+set per stage through `0x04`, and there is no lighting zone to drive. The vendor
+data agrees — `device/mouse_tk-gm012.xml` contains `<menu light="0"/>`, and the
+tool's own navigation is Home / Mouse Key / Mouse Config / Macro / Settings, with
+no lighting page.
+
+The command is documented here because the same firmware tree serves lit models
+(keyboards, mice with light guides). Byte 4 selects the payload shape:
 
 | Shape | Modes | Payload |
 |---|---|---|
@@ -119,13 +143,9 @@ Byte 4 selects the payload shape:
 
 `packed` is `(hiNibble << 4) | loNibble`, built by
 `(light[0x30] << 4) | light[0x2C]`, which maps onto brightness and speed, each
-0..15.
-
-Mode indices are 0-based in the database (`SetCurSelLightMode`); the vendor
-`.xml` lists them 1-based: flow, breathing, steady, neon, rainbow wave, off.
-The 7-colour shape exists because the same source tree also builds keyboard
-images; on a 6-mode mouse the vendor fills all seven entries with the same
-configured colour.
+0..15. Mode indices are 0-based in the database (`SetCurSelLightMode`); the
+vendor `.xml` lists them 1-based: flow, breathing, steady, neon, rainbow wave,
+off.
 
 ### Sensor — `0x06`
 
