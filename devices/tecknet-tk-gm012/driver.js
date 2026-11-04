@@ -64,8 +64,7 @@ const CMD = {
   DPI_READ: 0x13,
   DPI_COLOR_READ: 0x14,
   SENSOR_READ: 0x16,
-  POWER_READ: 0x17,
-  FIRMWARE: 0x20
+  POWER_READ: 0x17
 };
 
 const RATE_CODES = { 1000: 1, 500: 2, 250: 4, 125: 8 };
@@ -105,12 +104,12 @@ function decodeDpi(code) {
 /* <mouse_key> from the device XML. `value` is key_value, i.e. the index the
    firmware expects — note 204/205 are swapped relative to visual order. */
 const KEYS = [
-  { name: 201, value: 0, side: "left" },
-  { name: 202, value: 1, side: "right" },
-  { name: 203, value: 2, side: "right" },
-  { name: 204, value: 4, side: "left" },
-  { name: 205, value: 3, side: "left" },
-  { name: 206, value: 5, side: "right", dashed: true }
+  { name: 201, value: 0, side: "left", physical: "Left" },
+  { name: 202, value: 1, side: "right", physical: "Right" },
+  { name: 203, value: 2, side: "right", physical: "Middle" },
+  { name: 204, value: 4, side: "left", physical: "Forward" },
+  { name: 205, value: 3, side: "left", physical: "Back" },
+  { name: 206, value: 5, side: "right", dashed: true, physical: "DPI" }
 ];
 
 /* Button actions, in the vendor's own order (language/1033.lan ids 106-142,
@@ -236,7 +235,6 @@ let deviceInfo = null;
 let batteryLevel = null;
 let charging = false;
 let linkState = null;
-let fwVersion = null;
 let pollTimer = null;
 let pending = null;
 let lastWriteError = "";
@@ -466,16 +464,16 @@ async function readDpiColors() {
   return true;
 }
 
-/* Names for the 0x09 record classes, used when a binding is not in the
-   KEY_RECORDS table. The raw bytes stay visible so a vendor-tool binding can
-   still be identified and written back unchanged. */
+/* Names for the 0x09 record classes. Unknown bindings keep a friendly class
+   label and stay byte-for-byte in state.keyRecords; the raw bytes are shown in
+   the diagnostics report. */
 const KEY_CLASS_NAMES = {
-  0x10: "Mouse",
+  0x10: "Mouse Button",
   0x20: "Scroll",
-  0x30: "Double/Speed",
+  0x30: "Double-Click / Speed",
   0x40: "DPI",
   0x60: "Special",
-  0x70: "Keyboard",
+  0x70: "Keyboard Shortcut",
   0x80: "Media",
   0x90: "Macro"
 };
@@ -486,8 +484,7 @@ function describeKeyRecord(record) {
     if (rec.join(",") === joined) return name;
   }
   if (record[0] === 0x90) return "Macro";
-  const kind = KEY_CLASS_NAMES[record[0] & 0xF0] || "Custom";
-  return `${kind} (${hexOf(record, 3).toUpperCase()})`;
+  return KEY_CLASS_NAMES[record[0] & 0xF0] || "Custom Action";
 }
 
 async function readKeys() {
@@ -526,19 +523,6 @@ async function readPower() {
   return true;
 }
 
-/* Command 0x20 returns the firmware as BCD: byte 5 is the major, byte 4 the
-   minor. 0x26 0x03 -> 3.26, which matches bcdDevice 0x0326. (Over USB the same
-   pair also appears in the 0x10 reply at [8..9]; over 2.4G those bytes are
-   zero and only 0x20 carries it.) */
-async function readFirmware() {
-  const res = await sendCommand(CMD.FIRMWARE, [], 0, { isWrite: false });
-  if (!res.reply || res.reply.length < 6) return false;
-  const bcd = (b) => `${(b >> 4) & 0x0F}${b & 0x0F}`;
-  fwVersion = `${Number(bcd(res.reply[5]))}.${bcd(res.reply[4])}`;
-  return true;
-}
-
-/* Pull the whole configuration back off the device. */
 async function syncFromDevice() {
   if (!hidDevice || !hidDevice.opened) return false;
   await readBattery();
@@ -547,7 +531,6 @@ async function syncFromDevice() {
   await readDpi();
   await readDpiColors();
   await readPower();
-  await readFirmware();
   refreshUI();
   updateHud();
   updateDiagnostics();
@@ -748,7 +731,6 @@ async function attach(device, announce, allowSwitch) {
   batteryLevel = null;
   charging = false;
   linkState = null;
-  fwVersion = null;
   if (!hidDevice.opened) {
     try {
       await hidDevice.open();
@@ -917,6 +899,8 @@ function updateHud() {
   const mode = $("hud-mode");
   if (dot) dot.classList.toggle("online", linked);
   if (status) status.textContent = !online ? "STANDBY" : (linked ? "ONLINE" : "NO REPLY");
+  const connectBtn = $("btn-connect");
+  if (connectBtn) connectBtn.textContent = online ? "APPLY" : "CONNECT";
   if (mode) {
     if (!online || !hidDevice) mode.textContent = "NONE";
     else if (hidDevice.vendorId === WIRELESS.vendorId) mode.textContent = "2.4G WIRELESS";
@@ -935,9 +919,6 @@ function updateHud() {
     bar.style.width = pct === null ? "0%" : `${pct}%`;
     bar.style.background = pct !== null && pct <= 20 ? "#ff4655" : "";
   }
-
-  const fw = $("header-fw");
-  if (fw) fw.textContent = `FW: ${online && fwVersion ? fwVersion : "--"}`;
 }
 
 function updateDiagnostics() {
@@ -1023,7 +1004,7 @@ function buildKeySelects() {
     const select = $("btn-select-" + i);
     if (!select) continue;
     const current = state.keys[i] || "Disable Key";
-    const actions = KEY_ACTIONS.slice();
+    const actions = KEY_ACTIONS.filter((a) => KEY_RECORDS[a] || a === "Macro");
     const raw = state.keyRecords && Array.isArray(state.keyRecords[i]) ? state.keyRecords[i] : null;
     const rawLabel = raw ? describeKeyRecord(raw) : null;
     // Keep a binding read from the mouse even when it is not in the built-in
@@ -1048,12 +1029,6 @@ function buildKeySelects() {
     };
     const label = $("anchor-label-" + i);
     if (label) label.textContent = `${i + 1}. ${current}`;
-
-    const hint = $("key-hint-" + i);
-    if (hint) {
-      hint.textContent = `${hint.dataset.base || ""} · `
-        + (raw ? `wire ${hexOf(raw, 3).toUpperCase()}` : "not read yet");
-    }
   }
 }
 
@@ -1207,8 +1182,8 @@ function refreshUI() {
   if (macroKey) {
     const bound = Array.isArray(state.keys) ? state.keys.indexOf("Macro") : -1;
     if (bound >= 0) macroTarget = bound;
-    macroKey.innerHTML = KEYS.map((k, i) =>
-      `<option value="${i}">Key ${i + 1} — wire ${k.value}</option>`).join("");
+    macroKey.innerHTML = KEYS.map((key, i) =>
+      `<option value="${i}">Key ${i + 1} — ${key.physical}</option>`).join("");
     macroKey.value = String(macroTarget);
   }
   const macroModeSelect = $("sel-macro-mode");
@@ -1518,7 +1493,6 @@ document.addEventListener("DOMContentLoaded", () => {
     batteryLevel = null;
     charging = false;
     linkState = null;
-    fwVersion = null;
     stopPolling();
     updateHud();
     updateDiagnostics();
@@ -1572,7 +1546,7 @@ document.addEventListener("DOMContentLoaded", () => {
     state.keyRecords = null;
     buildKeySelects();
     saveState();
-    showToast("Keys reset to vendor defaults");
+    showToast("Default mapping loaded — APPLY TO MOUSE to write");
   });
 
   $("btn-reset-led")?.addEventListener("click", async () => {

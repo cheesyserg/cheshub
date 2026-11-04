@@ -13,10 +13,10 @@
     </div>
 
     <div class="nav-menu">
-      <div class="nav-section-title">ECOSYSTEM</div>
-      <div class="nav-item font-impact" onclick="location.href='../../index.html'">DEVICES LIBRARY</div>
+      <div class="nav-section-title">DEVICES</div>
+      <div class="nav-item font-impact" onclick="location.href='../../index.html'">ALL DEVICES</div>
 
-      <div class="nav-section-title">ACTIVE HARDWARE</div>
+      <div class="nav-section-title">CONFIGURATION</div>
       <div class="nav-item active font-impact" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">BUTTONS</div>
       <div class="nav-item font-impact" id="nav-tab-performance" onclick="switchTab('tab-performance')">PERFORMANCE</div>
       <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER</div>
@@ -24,8 +24,7 @@
       <div class="nav-item font-impact" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">PROFILES</div>
 
       <div class="nav-section-title">REFERENCE</div>
-      <div class="nav-item font-impact" id="nav-tab-diagnostics" onclick="switchTab('tab-diagnostics')">DIAGNOSTICS</div>
-      <div class="nav-item font-impact" onclick="window.open('PROTOCOL.md','_blank')">PROTOCOL NOTES</div>
+      <div class="nav-item font-impact" onclick="window.open('REGISTERS.md','_blank')">REGISTER MAP</div>
     </div>
 
     <div class="sidebar-footer">
@@ -47,6 +46,7 @@
           <span id="hud-mode">NONE</span>
         </div>
       </div>
+      <button class="advanced-link" type="button" onclick="switchTab('tab-diagnostics')">Diagnostics</button>
     </div>
   </aside>
 
@@ -54,11 +54,10 @@
     <header class="top-header">
       <div class="header-left">
         <span class="device-title font-impact">TECKNET TK-GM012</span>
-        <span class="fw-tag" id="header-fw">FW: --</span>
       </div>
       <div class="header-actions">
         <button class="btn-ghost font-impact" id="btn-sync" type="button" title="Read the whole configuration back from the mouse">SYNC</button>
-        <button class="btn-primary font-impact" id="btn-connect" type="button" title="Connect, or write report rate, DPI, colours and power">CONNECT / APPLY</button>
+        <button class="btn-primary font-impact" id="btn-connect" type="button" title="Connect, or write report rate, DPI, colours and power">CONNECT</button>
       </div>
     </header>
 
@@ -111,32 +110,14 @@
           <!-- BUTTONS -->
           <div class="tab-panel active" id="tab-buttons">
             <div class="panel-section">
-              <div class="section-title font-impact">BUTTON FUNCTION</div>
-              <div class="section-desc">Assign an action to each of the six physical buttons. Wire index
-                (key_value) is shown per row — keys 4 and 5 are swapped relative to visual order.</div>
-              <div class="key-grid">
-                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint" id="key-hint-0" data-base="Left button · value 0">Left button · value 0</span></div>
-                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint" id="key-hint-1" data-base="Right button · value 1">Right button · value 1</span></div>
-                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint" id="key-hint-2" data-base="Wheel click · value 2">Wheel click · value 2</span></div>
-                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint" id="key-hint-3" data-base="Side, front · value 4">Side, front · value 4</span></div>
-                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint" id="key-hint-4" data-base="Side, rear · value 3">Side, rear · value 3</span></div>
-                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint" id="key-hint-5" data-base="DPI loop · value 5">DPI loop · value 5</span></div>
-              </div>
+              <div class="section-title font-impact">BUTTON ASSIGNMENT</div>
+              <div class="section-desc">Choose an action for each of the six buttons, then apply the
+                changes to the mouse.</div>
               <div class="section-actions">
                 <button class="btn-ghost font-impact" id="btn-read-keys" type="button">READ FROM MOUSE</button>
-                <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">RESET ALL KEYS</button>
-                <button class="btn-primary font-impact" id="btn-apply-keys" type="button">WRITE TO DEVICE</button>
+                <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">LOAD DEFAULTS</button>
+                <button class="btn-primary font-impact" id="btn-apply-keys" type="button">APPLY TO MOUSE</button>
               </div>
-              <p class="section-note">
-                <strong>READ FROM MOUSE</strong> issues command <code>0x11</code>, which
-                returns the same six 3-byte records the mouse is currently using. Known
-                actions are named; anything else is shown with its class and raw bytes
-                (for example <code>Keyboard (70 1C 00)</code>) and is written back
-                unchanged if you leave it selected. <strong>WRITE TO DEVICE</strong>
-                sends <code>0x09</code>. Macro slots take their body from the
-                <strong>MACRO</strong> tab; keyboard and system-shortcut actions are not
-                fully decoded yet, so they are preserved rather than guessed.
-              </p>
             </div>
           </div>
 
@@ -167,24 +148,11 @@
                 <input type="color" id="inp-dpi-color" class="color-chip" value="#00ff00">
               </div>
 
-              <p class="section-note" id="dpi-encode-note">
-                The mouse stores a compressed code, not the displayed value
-                (<code>dpi/50</code> up to 10000, then 100-step, then 1000-step above
-                13000). The first byte of <code>0x03</code> packs
-                <code>(active_stage &lt;&lt; 4) | count</code>, so clicking a card both
-                selects it for editing and switches the mouse to that stage. Values
-                near a boundary round to what the hardware can hold.
-              </p>
-
               <div class="section-actions">
                 <button class="btn-ghost font-impact" id="btn-reset-led" type="button">RESET INDICATOR LED</button>
               </div>
 
-              <p class="section-note">
-                This model has one LED: the DPI indicator under the wheel. It shows the
-                colour assigned to the active stage; there is no lighting zone to drive.
-                The vendor XML agrees — <code>&lt;menu light="0"/&gt;</code>.
-              </p>
+              <p class="section-note">The DPI indicator shows the colour of the active stage.</p>
             </div>
 
             <div class="panel-section">
@@ -230,20 +198,14 @@
                 <label class="toggle"><input type="checkbox" id="chk-wake"><span class="slider"></span></label>
               </div>
 
-              <p class="section-note">
-                The vendor exposes eight timeouts: 1, 2, 5, 6, 10, 15, 20 and
-                30 minutes. The firmware stores the timeout as
-                <code>minutes * 6</code>, so 1 min is <code>0x06</code> and the
-                factory default 30 min is <code>0xB4</code> (180). Moving the mouse
-                wakes it when <code>move_wakeup</code> is on; this model exposes no
-                control for <code>move_closelight</code>, so it stays at 0.
-              </p>
+              <p class="section-note">The mouse sleeps after the selected idle time. Move
+                wake-up brings it back as soon as it is moved.</p>
             </div>
 
             <div class="panel-section danger-zone">
               <div class="section-title font-impact">RESTORE</div>
-              <div class="section-desc">Writes <code>0x0F 01 FF</code>, which resets DPI, keys
-                and power settings on the mouse.</div>
+              <div class="section-desc">Reset DPI, button assignments, macros and power settings to
+                the factory defaults. This cannot be undone.</div>
               <button class="btn-ghost font-impact" id="btn-factory" type="button">RESTORE FACTORY DEFAULTS</button>
             </div>
           </div>
@@ -252,8 +214,8 @@
           <div class="tab-panel" id="tab-macro">
             <div class="panel-section">
               <div class="section-title font-impact">MACRO RECORDER</div>
-              <div class="section-desc">Capture keystrokes while this page has focus, add pauses,
-                then upload the sequence to one of the six buttons. The mouse plays it back on
+              <div class="section-desc">Record up to six keyboard events, add pauses, then
+                upload the sequence to one of the six buttons. The mouse plays it back on
                 its own — nothing keeps running here.</div>
 
               <div class="section-actions">
@@ -275,9 +237,9 @@
                 <select id="sel-macro-key" class="select-compact"></select>
                 <label class="inline-label" for="sel-macro-mode">MODE</label>
                 <select id="sel-macro-mode" class="select-compact">
-                  <option value="once">Play once · 0x10</option>
-                  <option value="repeat">Repeat N · 0x20</option>
-                  <option value="toggle">Toggle · 0x40</option>
+                  <option value="once">Play once</option>
+                  <option value="repeat">Repeat</option>
+                  <option value="toggle">Toggle</option>
                 </select>
                 <label class="inline-label" for="inp-macro-count">TIMES</label>
                 <input type="number" id="inp-macro-count" class="input-compact" value="1" min="1" max="255" disabled>
@@ -288,18 +250,9 @@
                 <button class="btn-ghost font-impact" id="btn-unbind-macro" type="button">RESTORE KEY BINDING</button>
               </div>
 
-              <p class="section-note">
-                Events are encoded as four-byte records: class, delay, HID usage. The
-                delay belongs to the event it follows, so the last event can hold a
-                trailing pause. This studio caps a macro at six events (25 payload
-                bytes); the vendor chunks longer sequences across several
-                <code>0x08</code> writes. Modifier keys use the mouse's own eight-slot
-                bitmap; the mode flags on the <code>0x90</code> binding
-                (<code>0x10</code> once, <code>0x20</code> repeat, <code>0x40</code>
-                toggle) come from the vendor binary. <strong>CLEAR</strong> only clears
-                the editor; <strong>RESTORE KEY BINDING</strong> writes the default
-                action back to the mouse.
-              </p>
+              <p class="section-note"><strong>CLEAR</strong> clears the editor only.
+                <strong>RESTORE KEY BINDING</strong> removes the macro from the mouse and
+                restores the button's default action.</p>
             </div>
           </div>
 
@@ -307,7 +260,7 @@
           <div class="tab-panel" id="tab-profiles">
             <div class="panel-section">
               <div class="section-title font-impact">PROFILE SLOTS</div>
-              <div class="section-desc">Profiles live in this browser and travel with your ChesHub checkout.</div>
+              <div class="section-desc">Save and recall configurations stored in this browser.</div>
 
               <div class="profile-toolbar">
                 <input type="text" id="inp-profile-name" class="input-compact" placeholder="Profile name" value="Profile 1">

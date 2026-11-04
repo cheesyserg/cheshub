@@ -11,6 +11,8 @@ Confidence is shown per row so nothing here is presented as more certain than
 it is. Anything marked *inferred* is worth confirming with a USB capture
 (Wireshark + USBPcap) before trusting it.
 
+For a compact register-by-register reference, see [REGISTERS.md](REGISTERS.md).
+
 ## Transport
 
 The tool talks to the vendor HID collection (`MI_02`) through `hidapi`:

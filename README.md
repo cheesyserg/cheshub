@@ -50,7 +50,9 @@ answer, so the studio filters on that exact collection.
 
 The wire protocol was reverse-engineered from the vendor tool and is documented
 in [`devices/tecknet-tk-gm012/PROTOCOL.md`](devices/tecknet-tk-gm012/PROTOCOL.md),
-with every field marked verified or inferred.
+with every field marked verified or inferred. A compact register-by-register
+map is in
+[`devices/tecknet-tk-gm012/REGISTERS.md`](devices/tecknet-tk-gm012/REGISTERS.md).
 
 ### AJAZZ AJ139 V2 MC
 
@@ -107,6 +109,7 @@ devices/
     driver.js                   transport + protocol + UI
     style.css                   device styling
     PROTOCOL.md                 wire-protocol notes (where recovered)
+    REGISTERS.md                compact register-by-register map
 .github/workflows/static.yml    deploy to GitHub Pages on push to main
 ```
 
@@ -159,18 +162,19 @@ icon included) and reload. On Linux, check `lsusb` and that nothing like
 
 If it still does not appear, the registry filter may be too narrow for your
 board revision. Use **SCAN ALL VENDOR HID** on the hub (or **SCAN ANY VENDOR
-HID** in a device's DIAGNOSTICS tab): those list every vendor-defined HID
+HID** in a device's Diagnostics panel): those list every vendor-defined HID
 collection the browser can see. Picking one there prints its `vendorId`,
 `productId` and usage pages — that is the information needed to add or fix a
 device entry.
 
 **The page still shows an old error message**
 GitHub Pages caches aggressively. Hard-reload with `Ctrl+Shift+R` (or
-`Cmd+Shift+R`). If the DIAGNOSTICS tab is missing, you are looking at a stale
-build — the current studio always has it.
+`Cmd+Shift+R`). If the Diagnostics link is missing, you are looking at a stale
+build — the current studio always has it at the bottom of the sidebar.
 
 **The device is connected but every command times out**
-Open DIAGNOSTICS. `INFO REPLY (0x10)` should show bytes after connecting, since
+Open Diagnostics from the bottom of the sidebar. `INFO REPLY (0x10)` should
+show bytes after connecting, since
 every session starts with that read. If it says `no reply` while `INTERFACE` is
 red, you are on the wrong HID collection; re-pair. If it says `no reply` while
 `INTERFACE` is green, the wire log shows exactly what was sent — attach it to a
@@ -180,7 +184,7 @@ bug report.
 Devices expose several HID collections. The controllable one is normally the
 vendor collection (`MI_02`, usage page `0xFF00`–`0xFFFF`) rather than the
 standard mouse or keyboard interface. The TK-GM012 studio shows the collection
-it bound to under **DIAGNOSTICS**; this receiver answers on interface 2, usage
+it bound to under **Diagnostics**; this receiver answers on interface 2, usage
 page `0xFF01` / usage `0x0010`. A consumer-control collection has no output
 report at all, and trying to write it reports `Failed to write the report.`
 
