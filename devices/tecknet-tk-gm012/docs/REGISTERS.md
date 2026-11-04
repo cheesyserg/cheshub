@@ -217,7 +217,15 @@ Modifier bitmap:
 The delay belongs to the event it follows, so the final record can carry a
 trailing pause. There is no read command for this register. The vendor chunks
 sequences longer than six events across several `0x08` writes; the studio caps
-at six. Disassembly-derived, not yet confirmed on hardware.
+at six. Verified capture for a press/release of A with a 78 ms hold:
+
+```text
+00 08 00 01 09 05 30 4e 00 04 b0 01 00 04
+```
+
+`0x4e` = 78 ms sits in the key-down record, i.e. the delay until the next
+event. The key-up record keeps the minimum `1`. Idle time after the last event
+is not recorded, so it never reaches the packet.
 
 ## `0x09` / `0x11` — button bindings
 

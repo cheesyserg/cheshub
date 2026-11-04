@@ -492,9 +492,27 @@ trailing pause. `1` is the firmware's minimum. Modifier bits from
 `0x10`, right ctrl `0x04`, left alt `0x40`, right alt `0x80`, left win `0x08`,
 right win `0x02`.
 
+Verified capture of a macro bound to the DPI-loop key (`key_value 5`) that
+presses and releases A with a 78 ms gap, followed by the `0x09` binding:
+
+```text
+08 00 01 09  05  30 4e 00 04  b0 01 00 04
+09 00 01 0f  ...  90 25 01  00 00
+```
+
+- `30 4e 00 04` — keyboard down, usage `0x04` = A, 78 ms (`0x4e`) until the
+  next event.
+- `b0 01 00 04` — keyboard up, then the minimum 1 ms.
+- `90 25 01` — key `5`, flag `0x20` (Loop Times), count `1`: play once. The
+  vendor's recorder does not store idle time after the final event, so the
+  silence before Stop never reaches the packet.
+
+The studio's recorder now inserts the same delay rows automatically, so a
+recorded press keeps its real duration instead of collapsing to 1 ms.
+
 The simple button bindings still use `0x09` above; `0x08` only carries the
 macro body. Writing a macro therefore takes two commands: `0x08` for the key's
-slot, then `0x09` with that key's record set to `90 <key_value | mode> <loops>`.
+slot, then `0x09` with that key's record set to `90 <key_value | loop flag> <count>`.
 
 There is no read counterpart for `0x08` in the launch sweep, and the vendor
 tool keeps macro bodies in its local SQLite database rather than reading them

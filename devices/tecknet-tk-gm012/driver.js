@@ -248,6 +248,7 @@ let macroSteps = [];
 let macroTarget = 5;          // visual key index; 5 = the DPI-loop key
 let macroMode = "once";      // once | repeat | toggle | hold
 let macroRepeat = 1;
+let lastStepAt = 0;          // timestamp of the previous recorded event, for auto delays
 let recording = false;
 
 const $ = (id) => document.getElementById(id);
@@ -1469,6 +1470,7 @@ function startRecording() {
   if (recording) return;
   recording = true;
   macroSteps = [];
+  lastStepAt = performance.now();
   buildMacroList();
   saveMacro();
   const btn = $("btn-record");
@@ -1492,11 +1494,23 @@ function macroKeyHook(event) {
   }
   if (event.repeat) return;
   event.preventDefault();
+
+  /* The vendor recorder inserts a "%d ms" row for the pause before each event
+     (MacroRecrodData), so a recorded press keeps its real press duration: the
+     capture shows 78 ms becoming `30 4e 00 04`. Idle time before Stop is not
+     recorded, because there is no following event to attach it to. */
+  const now = performance.now();
+  if (macroSteps.length) {
+    const gap = Math.min(31000, Math.round(now - lastStepAt));
+    if (gap >= 1) macroSteps.push({ kind: "delay", ms: gap });
+  }
+
   macroSteps.push({
     kind: "key",
     type: event.type === "keydown" ? "down" : "up",
     key: event.code || "KeyA"
   });
+  lastStepAt = now;
   buildMacroList();
   saveMacro();
 }
