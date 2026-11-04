@@ -329,12 +329,11 @@
               </p>
 
               <p class="section-note">
-                <code>DriverComm::FindDevice</code> only accepts interfaces whose
-                <code>usage_page</code> is <code>0xFFEF</code> and whose
-                <code>usage</code> is <code>0</code>. Picking the boot mouse or keyboard
-                collection instead makes every write disappear without an error.
-                Every connection then starts with read command <code>0x10</code>,
-                exactly like <code>DriverComm::GetDeviceInfo</code>.
+                The vendor collection on this receiver is interface 2,
+                usage page <code>0xFF01</code> / usage <code>0x0010</code>. The mouse,
+                keyboard and consumer-control collections either have no output
+                report or never answer the <code>0x10</code> read — picking one of
+                those gives <code>Failed to write the report.</code>
               </p>
             </div>
           </div>

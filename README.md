@@ -40,11 +40,9 @@ and factory defaults are transcribed from the same file.
 
 The only LED on this model is the DPI indicator under the wheel, so the studio
 has no lighting page — the API exposes the colour per DPI stage instead. The
-mouse answers on usage page `0xFFEF`, usage `0x00`; writes sent to the boot
-mouse collection are silently dropped. Because Chrome lists one row per HID
-interface and they usually share a product name, the studio lists every
-interface of the brand and validates the collection after pairing, showing the
-one you got in **DIAGNOSTICS**.
+mouse answers on interface 2, usage page `0xFF01` / usage `0x0010`; the mouse,
+keyboard and consumer-control collections either have no output report or never
+answer, so the studio filters on that exact collection.
 
 The wire protocol was reverse-engineered from the vendor tool and is documented
 in [`devices/tecknet-tk-gm012/PROTOCOL.md`](devices/tecknet-tk-gm012/PROTOCOL.md),
@@ -178,8 +176,9 @@ bug report.
 Devices expose several HID collections. The controllable one is normally the
 vendor collection (`MI_02`, usage page `0xFF00`–`0xFFFF`) rather than the
 standard mouse or keyboard interface. The TK-GM012 studio shows the collection
-it bound to under **DIAGNOSTICS**, and the firmware only answers on usage page
-`0xFFEF` / usage `0x00`.
+it bound to under **DIAGNOSTICS**; this receiver answers on interface 2, usage
+page `0xFF01` / usage `0x0010`. A consumer-control collection has no output
+report at all, and trying to write it reports `Failed to write the report.`
 
 **Settings reset after unplugging**
 Some firmware keeps settings in RAM until a save command is sent. Re-apply, or

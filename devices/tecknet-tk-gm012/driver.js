@@ -9,33 +9,43 @@
  *   [4] length/type      [5..31] payload
  *   [32] checksum = sum(5..31) & 0xFF
  *
- * The vendor binds to one specific HID collection: DriverComm::FindDevice at
- * 0x4C3A0 rejects every interface whose usage_page is not 0xFFEF or whose
- * usage is not 0. Writes to a boot mouse/keyboard collection are silently
- * dropped. The picker therefore stays permissive (any interface of the brand)
- * and the collection is validated after pairing, because a filter that pins
- * 0xFFEF/0x00 shows an empty picker when a unit describes it differently.
+ * The vendor tool ignores the usage page when it enumerates:
+ * DriverComm::EnumerateDevice opens every interface and keeps the ones that
+ * answer the 0x10 read. On this receiver that is interface 2,
+ * usage_page 0xFF01 / usage 0x0010 (measured with hidapi). Everything else —
+ * the mouse and keyboard collections, and the consumer-control collection —
+ * either has no output report or never answers.
+ *
+ * (DriverComm::FindDevice @ 0x4C3A0 does ask for 0xFFEF/0x00, but it is not the
+ * path this receiver is opened through; filtering on it showed an empty picker.)
  */
 
 const WIRED = { vendorId: 0x248A, productId: 0x5D2E };
 const WIRELESS = { vendorId: 0x249A, productId: 0x5C2F };
 
-/* Pairing must not depend on the usage page: Chrome shows one row per HID
-   interface, and a filter that pins 0xFFEF/0x00 shows an empty picker on units
-   that describe the vendor collection differently. So the picker lists every
-   interface of the brand and the collection is validated after pairing. */
+/* Measured with hidapi on the actual receiver:
+ *
+ *   if=2  usage_page=0xFF01 usage=0x0010   <- vendor collection (answers 0x10)
+ *   if=0  usage_page=0x0001 usage=0x0002   <- mouse   (protected, hidden)
+ *   if=1  usage_page=0x000C usage=0x0001   <- consumer control
+ *   if=1  usage_page=0x0001 usage=0x0006   <- keyboard (protected, hidden)
+ *
+ * DriverComm::FindDevice @ 0x4C3A0 asks for 0xFFEF/0x00, but that is not the
+ * path this receiver is opened through: DriverComm::EnumerateDevice opens every
+ * interface and keeps the ones that answer the 0x10 read. 0xFF01/0x0010 is the
+ * one that answers here. */
+const VENDOR_PAGE = 0xFF01;
+const VENDOR_USAGE = 0x0010;
+
+/* Primary: only the collection that actually answers. This is precise enough
+   to show a single row instead of several identical-looking interfaces. */
 const FILTERS = [
-  { vendorId: WIRED.vendorId },
-  { vendorId: WIRELESS.vendorId }
+  { ...WIRED, usagePage: VENDOR_PAGE, usage: VENDOR_USAGE },
+  { ...WIRELESS, usagePage: VENDOR_PAGE, usage: VENDOR_USAGE }
 ];
 
-/* Last resort: every vendor-defined usage page, for a unit whose vendor id is
-   not in the list above. */
-const FILTERS_VENDOR = (() => {
-  const out = [];
-  for (let page = 0xFF00; page <= 0xFFFF; page++) out.push({ usagePage: page });
-  return out;
-})();
+/* Every interface of the brand, for picking a different row. */
+const FILTERS_ALL = [{ vendorId: WIRED.vendorId }, { vendorId: WIRELESS.vendorId }];
 
 const CMD = {
   INFO: 0x10,
@@ -431,10 +441,17 @@ async function attach(device, announce, allowSwitch) {
   }
 }
 
-/* Any vendor-defined page counts. The vendor tool insists on 0xFFEF/0x00, but
-   gating the UI on that exact pair is what produced an empty picker. */
+/* Last resort: every vendor-defined usage page, for a unit whose vendor id is
+   not in the list above. */
+const FILTERS_VENDOR = (() => {
+  const out = [];
+  for (let page = 0xFF00; page <= 0xFFFF; page++) out.push({ usagePage: page });
+  return out;
+})();
 function isVendorCollection(device) {
-  return (device.collections || []).some((c) => c.usagePage >= 0xFF00);
+  return (device.collections || []).some(
+    (c) => c.usagePage === VENDOR_PAGE && c.usage === VENDOR_USAGE) ||
+    (device.collections || []).some((c) => c.usagePage >= 0xFF00);
 }
 
 function pageSummary(device) {
@@ -822,7 +839,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (hidDevice && hidDevice.opened) applyAll();
     else requestPairWith(FILTERS);
   });
-  $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS, "all interfaces"));
+  $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS_ALL, "all interfaces"));
   $("btn-pair-scan")?.addEventListener("click", () => requestPairWith(FILTERS_VENDOR, "vendor scan"));
 
   $("btn-pair-custom")?.addEventListener("click", () => {

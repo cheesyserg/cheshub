@@ -45,12 +45,12 @@
         name: "TECKNET TK-GM012",
         type: "Wireless Gaming Mouse",
         path: "devices/tecknet-tk-gm012/index.html",
-        // Vendor id only: a filter that pins the usage page shows an empty
-        // picker on units that describe the vendor collection differently.
-        // The studio validates the collection after pairing instead.
+        // Vendor collection measured on a real receiver: interface 2,
+        // usage page 0xFF01 / usage 0x0010. The other interfaces have no
+        // output report or never answer.
         filters: [
-          { vendorId: 0x248A },
-          { vendorId: 0x249A }
+          { vendorId: 0x248A, productId: 0x5D2E, usagePage: 0xFF01, usage: 0x0010 },
+          { vendorId: 0x249A, productId: 0x5C2F, usagePage: 0xFF01, usage: 0x0010 }
         ]
       },
       {

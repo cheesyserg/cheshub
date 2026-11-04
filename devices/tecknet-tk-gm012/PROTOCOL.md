@@ -29,11 +29,27 @@ Enumeration uses SetupAPI (`SetupDiGetClassDevsA`,
 
 | Mode | VID | PID | Interface | Collection |
 |---|---|---|---|---|
-| USB wired | `0x248A` | `0x5D2E` | `MI_02` | usage page `0xFFEF`, usage `0x00` |
-| 2.4 GHz | `0x249A` | `0x5C2F` | `MI_02` | usage page `0xFFEF`, usage `0x00` |
+| USB wired | `0x248A` | `0x5D2E` | `MI_02` | usage page `0xFF01`, usage `0x0010` |
+| 2.4 GHz | `0x249A` | `0x5C2F` | `MI_02` | usage page `0xFF01`, usage `0x0010` |
 
-The collection is not optional. `DriverComm::FindDevice @ 0x4C3A0` walks the
-`hid_enumerate()` list and rejects every entry that fails these checks:
+The collection was measured with `hidapi` on a real receiver, which enumerates
+four nodes:
+
+```
+if=2  usage_page=0xFF01 usage=0x0010   <- vendor collection, answers 0x10
+if=0  usage_page=0x0001 usage=0x0002   <- mouse   (protected, hidden from WebHID)
+if=1  usage_page=0x000C usage=0x0001   <- consumer control
+if=1  usage_page=0x0001 usage=0x0006   <- keyboard (protected, hidden from WebHID)
+```
+
+`DriverComm::FindDevice @ 0x4C3A0` does compare `usage_page` against `0xFFEF`
+and `usage` against `0`, but that is **not** the path this receiver is opened
+through. `DriverComm::EnumerateDevice` never looks at the usage page at all: it
+opens every enumerated interface and keeps the ones that answer the `0x10` read
+(after one 500 ms retry). That is why the vendor app works regardless of the
+page, and why filtering on `0xFFEF` produced an empty browser picker.
+
+The collection is not optional.
 
 ```asm
 0004C3C2  mov ecx, ffef
@@ -44,12 +60,11 @@ The collection is not optional. `DriverComm::FindDevice @ 0x4C3A0` walks the
 0004C3DE  cmp [esi+0x1a], 0         ; usage == 0
 ```
 
-Pairing the boot mouse or keyboard collection instead produces writes the
-firmware silently ignores — no error, no reply. Trackpad/keyboard interfaces and
-the vendor collection often share the same product name in the browser picker,
-so the studio lists every interface of the brand and reports the one it got in
-DIAGNOSTICS rather than filtering on the page (a filter that pins
-`0xFFEF`/`0x00` shows an empty picker on units that describe it differently).
+Writes to a boot mouse/keyboard collection are silently dropped, and a
+consumer-control collection has no output report at all — Chrome answers that
+with `Failed to write the report.` The studio pins `0xFF01`/`0x0010` and also
+probes every other granted interface with the `0x10` read, mirroring what
+`EnumerateDevice` does.
 
 The build uses the `__fastcall` convention (`/Gr`): first two arguments in
 `ECX`/`EDX`. That detail matters when reading the disassembly.
