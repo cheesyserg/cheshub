@@ -395,8 +395,7 @@ async function autoConnect() {
   if (!navigator.hid) return;
   try {
     const paired = await navigator.hid.getDevices();
-    const ours = paired.filter((d) =>
-      [WIRED, WIRELESS].some((f) => f.vendorId === d.vendorId && f.productId === d.productId));
+    const ours = paired.filter(isOurs);
     if (!ours.length) return;
     // Prefer the collection with a vendor-defined usage page; fall back to any
     // granted interface so DIAGNOSTICS can show what the picker actually gave us.
@@ -405,6 +404,26 @@ async function autoConnect() {
   } catch (err) {
     /* ignore */
   }
+}
+
+/* A unit whose vendor/product id differs from the descriptor can be paired by
+   id; remember it so auto-connect keeps working across reloads. */
+function loadCustom() {
+  try {
+    return JSON.parse(localStorage.getItem("tk-gm012.custom") || "null");
+  } catch (err) {
+    return null;
+  }
+}
+
+function isOurs(device) {
+  const custom = loadCustom();
+  if (custom && device.vendorId === custom.vid &&
+      (custom.pid === null || custom.pid === undefined || device.productId === custom.pid)) {
+    return true;
+  }
+  return [WIRED, WIRELESS].some(
+    (f) => f.vendorId === device.vendorId && f.productId === device.productId);
 }
 
 /* -------------------------------------------------------------- diagnostics */
@@ -724,6 +743,27 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS, "all interfaces"));
   $("btn-pair-scan")?.addEventListener("click", () => requestPairWith(FILTERS_VENDOR, "vendor scan"));
+
+  $("btn-pair-custom")?.addEventListener("click", () => {
+    const hex = (s) => {
+      const cleaned = (s || "").trim().replace(/^0x/i, "").replace(/[^0-9a-fA-F]/g, "");
+      return cleaned ? parseInt(cleaned, 16) : NaN;
+    };
+    const vid = hex($("inp-custom-vid")?.value);
+    if (!Number.isInteger(vid) || vid > 0xFFFF) return showToast("Enter a vendor id in hex");
+    const filter = { vendorId: vid };
+    const pidRaw = ($("inp-custom-pid")?.value || "").trim();
+    let pid = null;
+    if (pidRaw) {
+      pid = hex(pidRaw);
+      if (!Number.isInteger(pid) || pid > 0xFFFF) return showToast("Enter a product id in hex");
+      filter.productId = pid;
+    }
+    try {
+      localStorage.setItem("tk-gm012.custom", JSON.stringify({ vid, pid }));
+    } catch (err) { /* storage disabled */ }
+    requestPairWith([filter], "custom");
+  });
 
   $("btn-sync")?.addEventListener("click", () => {
     refreshUI();

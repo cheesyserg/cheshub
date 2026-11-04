@@ -297,6 +297,19 @@
               <div class="diag-subtitle">COLLECTIONS</div>
               <div class="diag-list" id="diag-collections"></div>
 
+              <div class="diag-subtitle">CUSTOM PAIRING</div>
+              <div class="profile-toolbar">
+                <input id="inp-custom-vid" class="input-compact" placeholder="VID 248a">
+                <input id="inp-custom-pid" class="input-compact" placeholder="PID (optional)">
+                <button id="btn-pair-custom" class="btn-ghost small font-impact" type="button">PAIR</button>
+              </div>
+              <p class="section-note">
+                If the device reports a different vendor id than the descriptor
+                claims, pair it by the id Windows shows
+                (<code>Get-PnpDevice -Class HIDClass</code>). Leave the product id
+                empty to match any product from that vendor.
+              </p>
+
               <div class="diag-subtitle">WIRE LOG</div>
               <pre class="diag-wire" id="diag-wire">—</pre>
 
