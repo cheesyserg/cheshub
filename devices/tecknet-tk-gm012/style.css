@@ -72,11 +72,8 @@ code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
   filter: drop-shadow(0 20px 40px rgba(0,0,0,0.8));
 }
 
-.stage-svg { position: absolute; inset: 0; width: 480px; height: 480px; z-index: 5; pointer-events: none; }
-.stage-svg polyline { fill: none; stroke: var(--riot-red); stroke-width: 1.2; opacity: 0.55; }
-
 .dpi-slit-led {
-  position: absolute; left: 46.4%; top: 30.1%; width: 3.8%; height: 7.4%;
+  position: absolute; left: 49.4%; top: 35%; width: 2.8%; height: 4%;
   border-radius: 2px; background-color: var(--dpi-glow); z-index: 10;
   border: 1px solid rgba(0, 0, 0, 0.9);
   box-shadow: 0 0 4px #ffffff, 0 0 10px var(--dpi-glow), 0 0 20px var(--dpi-glow);
