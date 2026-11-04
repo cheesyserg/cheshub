@@ -83,12 +83,13 @@ The hosted site is served over HTTPS by GitHub Pages, so
 1. Open the [hub](https://cheesyserg.github.io/cheshub/) and choose the device.
 2. Plug in the device (for a 2.4 GHz mouse, plug in the dongle).
 3. Close the vendor utility — Windows grants one handle per HID collection.
-4. Click **Connect** in the studio header and pick the device in the browser
-   prompt.
+4. Click **Connect** (in the lock card or the header) and pick the device in
+   the browser prompt.
 5. Change settings, then click **Apply**.
 
-Previously paired devices appear automatically on the hub's card grid; the
-browser remembers the grant.
+Previously granted devices are marked **Online** on the hub; the browser
+remembers the grant. Every registered device is listed, so a studio can also
+be opened before pairing.
 
 ## How it works
 
@@ -104,8 +105,9 @@ backend, account, or telemetry.
 ## Project layout
 
 ```
-index.html                      hub page + device registry
+index.html                      hub page + device registry UI
 css/hub.css                     hub styling
+js/devices.js                   shared device registry (hub + studio sidebars)
 devices/
   <slug>/
     index.html                  device studio
@@ -119,14 +121,18 @@ devices/
 ## Adding a device
 
 1. Create `devices/<vendor>-<model>/` with `index.html`, `style.css`, and
-   `driver.js`. Copy an existing studio as a starting point.
-2. Register it in `REGISTRY` in the root `index.html`:
+   `driver.js`. Copy an existing studio as a starting point, and set its
+   `DEVICE_ID` constant to the registry `id` you add below.
+2. Register it in `CHESHUB_DEVICES` in `js/devices.js`. That one array feeds
+   the hub grid and the device list in every studio sidebar:
 
 ```js
 {
   id: "vendor-model",
   name: "VENDOR MODEL",
+  short: "MODEL",
   type: "Wireless Gaming Mouse",
+  kind: "mouse",
   path: "devices/vendor-model/index.html",
   filters: [
     { vendorId: 0x1234, productId: 0x5678, usagePage: 0xFF01, usage: 0x01 }

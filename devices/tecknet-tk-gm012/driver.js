@@ -229,6 +229,14 @@ const DEFAULTS = {
 /* default_dpi="2" is 1-based, so the second stage is active out of the box. */
 const DEFAULT_STAGE = 1;
 
+/* Registry id for this studio, and the icons used by the shared device list. */
+const DEVICE_ID = "tecknet-tk-gm012";
+
+const DEVICE_ICONS = {
+  mouse: '<rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/>',
+  headset: '<path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="2" y="13" width="4" height="7" rx="2"/><rect x="18" y="13" width="4" height="7" rx="2"/>'
+};
+
 let state = structuredClone(DEFAULTS);
 let wallpaper = { image: "", motion: true };
 let hidDevice = null;
@@ -1143,6 +1151,17 @@ function buildMacroList() {
   });
 }
 
+function buildDeviceList() {
+  const list = $("device-list");
+  const devices = window.CHESHUB_DEVICES || [];
+  if (!list || !devices.length) return;
+  list.innerHTML = devices.map((device) => `
+    <a class="nav-item${device.id === DEVICE_ID ? " active" : ""}" href="../../${device.path}">
+      <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${DEVICE_ICONS[device.kind] || DEVICE_ICONS.mouse}</svg>
+      <span>${device.short || device.name}</span>
+    </a>`).join("");
+}
+
 function buildProfiles() {
   const list = $("profile-list");
   if (!list) return;
@@ -1198,6 +1217,7 @@ function refreshUI() {
   updateStageLed();
   buildMacroList();
   buildProfiles();
+  buildDeviceList();
 
   const macroKey = $("sel-macro-key");
   if (macroKey) {
@@ -1248,7 +1268,7 @@ function saveState() {
 
 function loadWallpaper() {
   try {
-    const raw = JSON.parse(localStorage.getItem("tk-gm012.wallpaper") || "null");
+    const raw = JSON.parse(localStorage.getItem("cheshub.wallpaper") || "null");
     if (raw && typeof raw.image === "string") wallpaper.image = raw.image;
     if (raw && typeof raw.motion === "boolean") wallpaper.motion = raw.motion;
   } catch (err) { /* ignore */ }
@@ -1256,7 +1276,7 @@ function loadWallpaper() {
 
 function saveWallpaper() {
   try {
-    localStorage.setItem("tk-gm012.wallpaper", JSON.stringify(wallpaper));
+    localStorage.setItem("cheshub.wallpaper", JSON.stringify(wallpaper));
   } catch (err) {
     showToast("Wallpaper is too large to store");
   }

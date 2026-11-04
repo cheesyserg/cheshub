@@ -187,9 +187,11 @@ code {
   height: 62px;
   padding: 0 18px;
   border-bottom: 1px solid var(--border);
+  text-decoration: none;
   cursor: pointer;
   user-select: none;
 }
+.sidebar-brand:hover { text-decoration: none; }
 
 .brand-mark {
   width: 28px;
@@ -236,11 +238,12 @@ code {
   color: #aab2c0;
   font-size: 13px;
   font-weight: 500;
+  text-decoration: none;
   cursor: pointer;
   user-select: none;
   transition: background 0.18s ease, color 0.18s ease;
 }
-.nav-item:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); }
+.nav-item:hover { background: rgba(255, 255, 255, 0.04); color: var(--text); text-decoration: none; }
 .nav-item.active { background: var(--surface-3); color: var(--text); }
 .nav-item.active::before {
   content: "";
@@ -332,9 +335,34 @@ code {
   z-index: 20;
 }
 
-.header-left { display: flex; align-items: baseline; gap: 12px; }
+.header-left { display: flex; align-items: center; gap: 10px; }
+.header-titles { display: flex; align-items: baseline; gap: 10px; }
 .device-title { font-size: 17px; font-weight: 600; letter-spacing: 0.1px; color: var(--text); }
 .device-subtitle { font-size: 11px; color: var(--text-muted); }
+
+.header-back {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.header-back:hover { background: var(--surface-2); border-color: var(--border); color: var(--text); }
+.header-back svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 .header-actions { display: flex; align-items: center; gap: 10px; }
 
 /* ----------------------------------------------------------------- buttons */
