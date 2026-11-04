@@ -15,6 +15,12 @@
 
     <div class="action-bar">
       <button class="btn-primary font-impact" id="btn-scan" type="button">+ PAIR / DETECT HARDWARE</button>
+      <button class="btn-ghost font-impact" id="btn-scan-vendor" type="button">SCAN ALL VENDOR HID</button>
+      <p class="hint-line">
+        Chrome or Edge only. Close the vendor utility first — it holds the HID handle.
+        If nothing is listed, scan all vendor collections and report what comes back.
+      </p>
+      <pre class="scan-result" id="scan-result" hidden></pre>
     </div>
 
     <div class="devices-grid" id="devices-grid">
@@ -39,9 +45,12 @@
         name: "TECKNET TK-GM012",
         type: "Wireless Gaming Mouse",
         path: "devices/tecknet-tk-gm012/index.html",
+        // Vendor id only: a filter that pins the usage page shows an empty
+        // picker on units that describe the vendor collection differently.
+        // The studio validates the collection after pairing instead.
         filters: [
-          { vendorId: 0x248A, productId: 0x5D2E, usagePage: 0xFFEF, usage: 0x00 },
-          { vendorId: 0x249A, productId: 0x5C2F, usagePage: 0xFFEF, usage: 0x00 }
+          { vendorId: 0x248A },
+          { vendorId: 0x249A }
         ]
       },
       {
@@ -56,6 +65,19 @@
       }
     ];
 
+    // A registry filter may specify any subset of vendorId / productId /
+    // usagePage / usage. Anything unspecified is a wildcard.
+    function registryMatch(device) {
+      return REGISTRY.find(r => (r.filters || []).some(f => {
+        if (f.namePrefix !== undefined) return false;
+        if (f.vendorId !== undefined && f.vendorId !== device.vendorId) return false;
+        if (f.productId !== undefined && f.productId !== device.productId) return false;
+        if (f.usagePage === undefined) return true;
+        return (device.collections || []).some(c =>
+          c.usagePage === f.usagePage && (f.usage === undefined || c.usage === f.usage));
+      }));
+    }
+
     async function checkPairedDevices() {
       const grid = document.getElementById("devices-grid");
       grid.innerHTML = "";
@@ -65,11 +87,7 @@
       if (navigator.hid) {
         const paired = await navigator.hid.getDevices();
         paired.forEach(dev => {
-          const match = REGISTRY.find(r => 
-            r.filters && r.filters.some(f => 
-              f.vendorId === dev.vendorId && f.productId === dev.productId
-            )
-          );
+          const match = registryMatch(dev);
 
           if (match && !detectedDeviceIds.has(match.id)) {
             detectedDeviceIds.add(match.id);
@@ -124,6 +142,39 @@
         await pairViaHID();
       } else if (choice === "serial") {
         await pairViaSerial();
+      }
+    });
+
+    // Fallback for devices the registry filters do not match: list every
+    // vendor-defined HID collection and report what was picked.
+    document.getElementById("btn-scan-vendor").addEventListener("click", async () => {
+      if (!navigator.hid) return alert("WebHID is not available — use Chrome or Edge");
+      const filters = [];
+      for (let page = 0xFF00; page <= 0xFFFF; page++) filters.push({ usagePage: page });
+      try {
+        const devs = await navigator.hid.requestDevice({ filters });
+        if (!devs.length) return;
+        const dev = devs[0];
+        const match = registryMatch(dev);
+        if (match) {
+          await checkPairedDevices();
+          location.href = match.path;
+          return;
+        }
+        const pages = (dev.collections || [])
+          .map(c => `  usagePage 0x${c.usagePage.toString(16).toUpperCase()} / usage 0x${c.usage.toString(16).toUpperCase()}`);
+        const out = document.getElementById("scan-result");
+        out.hidden = false;
+        out.textContent = [
+          "Unregistered device — please report this:",
+          `product    ${dev.productName || "(unnamed)"}`,
+          `vendorId   0x${dev.vendorId.toString(16).toUpperCase()}`,
+          `productId  0x${dev.productId.toString(16).toUpperCase()}`,
+          "collections:",
+          ...pages
+        ].join("\n");
+      } catch (err) {
+        alert("Scan cancelled");
       }
     });
 

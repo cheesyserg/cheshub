@@ -303,7 +303,15 @@
               <div class="section-actions">
                 <button class="btn-ghost font-impact" id="btn-test" type="button">READ DEVICE INFO</button>
                 <button class="btn-ghost font-impact" id="btn-pair-any" type="button">SHOW ALL INTERFACES</button>
+                <button class="btn-ghost font-impact" id="btn-pair-scan" type="button">SCAN ANY VENDOR HID</button>
               </div>
+
+              <p class="section-note">
+                The device does not appear in the picker at all? Use
+                <strong>SCAN ANY VENDOR HID</strong> — it lists every vendor-defined
+                HID collection the browser can see. Pair it there and this panel
+                shows the real usage page.
+              </p>
 
               <p class="section-note">
                 <code>DriverComm::FindDevice</code> only accepts interfaces whose

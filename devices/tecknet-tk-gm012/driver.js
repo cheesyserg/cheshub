@@ -27,6 +27,16 @@ const FILTERS = [
 ];
 const FILTERS_ANY = [WIRED, WIRELESS];
 
+/* Last resort: every vendor-defined usage page. A filter that pins 0xFFEF shows
+   an empty picker on units that describe the collection differently, so this
+   lets the device be paired anyway and the real page read back from
+   DIAGNOSTICS. */
+const FILTERS_VENDOR = (() => {
+  const out = [];
+  for (let page = 0xFF00; page <= 0xFFFF; page++) out.push({ usagePage: page });
+  return out;
+})();
+
 const CMD = {
   INFO: 0x10,
   RATE: 0x02,
@@ -301,19 +311,17 @@ function setBusy(busy) {
 
 /* ------------------------------------------------------------------ connect */
 
-async function requestPair(anyInterface) {
+async function requestPairWith(filters, label) {
   if (!navigator.hid) return showToast("WebHID unavailable — use Chrome or Edge");
   try {
-    const devices = await navigator.hid.requestDevice({
-      filters: anyInterface ? FILTERS_ANY : FILTERS
-    });
+    const devices = await navigator.hid.requestDevice({ filters });
     if (!devices.length) return;
     if (hidDevice && hidDevice !== devices[0]) {
       try { await hidDevice.close(); } catch (err) { /* already gone */ }
     }
     await attach(devices[0], true);
   } catch (err) {
-    showToast("Pairing cancelled");
+    showToast(`Pairing cancelled${label ? " (" + label + ")" : ""}`);
   }
 }
 
@@ -700,9 +708,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("btn-connect")?.addEventListener("click", () => {
     if (hidDevice && hidDevice.opened) applyAll();
-    else requestPair(false);
+    else requestPairWith(FILTERS);
   });
-  $("btn-pair-any")?.addEventListener("click", () => requestPair(true));
+  $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS_ANY, "all interfaces"));
+  $("btn-pair-scan")?.addEventListener("click", () => requestPairWith(FILTERS_VENDOR, "vendor scan"));
 
   $("btn-sync")?.addEventListener("click", () => {
     refreshUI();

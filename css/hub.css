@@ -34,3 +34,8 @@ body { background: var(--riot-darker); color: var(--riot-white); font-family: -a
 .card-desc { font-size: 12px; color: var(--riot-gray); margin-bottom: 12px; }
 
 .empty-state { grid-column: 1 / -1; padding: 60px 20px; border: 1px dashed var(--riot-border); text-align: center; }
+.action-bar { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 24px 0 30px; }
+.hint-line { font-size: 11px; color: var(--riot-muted); text-align: center; max-width: 540px; line-height: 1.6; }
+.btn-ghost { background: transparent; color: #fff; border: 1px solid var(--riot-border); padding: 9px 20px; font-size: 12px; font-weight: 700; cursor: pointer; }
+.btn-ghost:hover { border-color: var(--riot-gray); }
+.scan-result { width: 100%; max-width: 620px; margin-top: 6px; background: var(--riot-panel); border: 1px solid var(--riot-border); border-left: 3px solid var(--riot-red); padding: 12px 14px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.7; color: var(--riot-gray); text-align: left; white-space: pre-wrap; overflow-x: auto; }

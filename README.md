@@ -153,6 +153,13 @@ The vendor utility is probably holding the handle. Quit it completely (tray
 icon included) and reload. On Linux, check `lsusb` and that nothing like
 `libratbag` grabbed the device.
 
+If it still does not appear, the registry filter may be too narrow for your
+board revision. Use **SCAN ALL VENDOR HID** on the hub (or **SCAN ANY VENDOR
+HID** in a device's DIAGNOSTICS tab): those list every vendor-defined HID
+collection the browser can see. Picking one there prints its `vendorId`,
+`productId` and usage pages — that is the information needed to add or fix a
+device entry.
+
 **The page still shows an old error message**
 GitHub Pages caches aggressively. Hard-reload with `Ctrl+Shift+R` (or
 `Cmd+Shift+R`). If the DIAGNOSTICS tab is missing, you are looking at a stale
