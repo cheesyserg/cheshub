@@ -110,6 +110,7 @@ let lastWriteError = "";
 let lastResult = "—";
 let selectedStage = DEFAULT_STAGE;
 let outputReportId = 0;
+let probing = false;
 let macroSteps = [];
 let recording = false;
 
@@ -202,9 +203,10 @@ async function sendCommand(cmd, payload, lenByte, opts = {}) {
     return { ok: false, error: "not connected" };
   }
   const report = buildReport(cmd, payload, lenByte, opts.isWrite !== false);
+  const plan = opts.attempts ? ATTEMPTS.slice(0, opts.attempts) : ATTEMPTS;
   let lastErr = "";
 
-  for (const attempt of ATTEMPTS) {
+  for (const attempt of plan) {
     lastWriteError = "";
     const reply = await exchange(report, attempt.wide, attempt.timeout);
     if (reply && reply.length) {
@@ -325,7 +327,62 @@ async function requestPairWith(filters, label) {
   }
 }
 
-async function attach(device, announce) {
+/* Send the open-time read to one specific interface without disturbing the
+   attached one. Returns the reply bytes, or null. */
+async function probeDeviceOnce(device) {
+  if (!device.opened) {
+    try {
+      await device.open();
+    } catch (err) {
+      return null;
+    }
+  }
+  const prevDevice = hidDevice;
+  const prevReportId = outputReportId;
+  hidDevice = device;
+  outputReportId = pickReportId(device);
+  device.oninputreport = (event) => {
+    const bytes = new Uint8Array(event.data.buffer);
+    logWire("RX", bytes);
+    if (pending) pending(bytes);
+  };
+  const res = await sendCommand(CMD.INFO, [], 0, { isWrite: false, attempts: 1 });
+  hidDevice = prevDevice;
+  outputReportId = prevReportId;
+  return res.reply || null;
+}
+
+/* Chrome grants one interface per pairing and they all share a product name in
+   the picker, so a silent interface is common. If other interfaces of the same
+   device were granted earlier, the one that answers 0x10 is the vendor
+   collection — switch to it automatically. */
+async function autoSwitchToAnswering(device) {
+  if (probing) return false;
+  let granted = [];
+  try {
+    granted = await navigator.hid.getDevices();
+  } catch (err) {
+    return false;
+  }
+  const others = granted.filter((d) => d !== device && isOurs(d));
+  if (!others.length) return false;
+
+  probing = true;
+  showToast(`Silent interface — trying ${others.length} other granted one(s)`);
+  for (const dev of others) {
+    const reply = await probeDeviceOnce(dev);
+    if (reply) {
+      probing = false;
+      await attach(dev, true, false);
+      return true;
+    }
+  }
+  probing = false;
+  showToast("None of the granted interfaces answered");
+  return false;
+}
+
+async function attach(device, announce, allowSwitch) {
   hidDevice = device;
   lastWriteError = "";
   if (!hidDevice.opened) {
@@ -351,6 +408,12 @@ async function attach(device, announce) {
 
   updateHud();
   updateDiagnostics();
+
+  // Correct-looking collection but no answer: look for a better granted one,
+  // even during auto-connect, since the picker cannot distinguish the rows.
+  const silent = !probe.reply && !probe.error;
+  if (silent && allowSwitch !== false && await autoSwitchToAnswering(device)) return;
+
   if (announce) {
     if (!isVendorCollection(device)) {
       showToast(`No vendor page (${pageSummary(device)}) — try another interface`);
@@ -359,7 +422,7 @@ async function attach(device, announce) {
     } else if (probe.error) {
       showToast(`Connected — ${probe.error}`);
     } else {
-      showToast("Connected — no reply, see DIAGNOSTICS");
+      showToast("No reply — try another row in the picker");
     }
   }
 }
@@ -803,6 +866,30 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast(res.reply
       ? `Device answered: ${res.reply.length} B`
       : res.error ? res.error : "No reply");
+  });
+
+  $("btn-copy-diag")?.addEventListener("click", async () => {
+    const text = (id) => ($(id)?.textContent || "").trim();
+    const rows = Array.from(document.querySelectorAll("#diag-collections .diag-row"))
+      .map((r) => "  " + r.textContent.replace(/\s+/g, " ").trim());
+    const report = [
+      `product    ${text("diag-product")}`,
+      `vid:pid    ${text("diag-ids")}`,
+      `interface  ${text("diag-interface")}`,
+      `info reply ${text("diag-info")}`,
+      `last cmd   ${text("diag-last")}`,
+      `last error ${text("diag-error")}`,
+      "collections:",
+      ...rows,
+      "wire log:",
+      text("diag-wire")
+    ].join("\n");
+    try {
+      await navigator.clipboard.writeText(report);
+      showToast("Diagnostics copied");
+    } catch (err) {
+      showToast("Clipboard blocked — select the text manually");
+    }
   });
 
   document.querySelectorAll("#rate-control .seg-btn").forEach((btn) => {
