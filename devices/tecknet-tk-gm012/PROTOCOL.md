@@ -172,27 +172,11 @@ Byte 4 is the payload length, `0` on reads.
 
 ### Read commands
 
-| Cmd | Emitted by | Contents |
-|---|---|---|
-| `0x10` | `GetDeviceInfo`, `GetDeviceNotify` | battery, firmware, link state |
-| `0x11` | `GetMouseData` | not decoded |
-| `0x12` | `GetMouseData` | report rate at `[4]`, printed as `%d` |
-| `0x13` | `GetMouseData` | not decoded |
-
-The `0x10` reply is parsed from `0x31C85` onward. Offsets below are into the
-`hidapi` buffer, which includes the report id at `[0]`; subtract one for WebHID:
-
-| Offset | Meaning |
-|---|---|
-| 7..8 | 16-bit value, little endian — probably firmware version |
-| 10 | device type, compared against `0x11` |
-| 11 | rate code, compared against `0x10` / `0x20` / `0x40` |
-| 12 | battery level |
-| 13 | charging state |
-| 14 | link state; `0` takes the "not connected" branch |
-
-The battery scaling was not confirmed, so the studio shows the raw reply in
-DIAGNOSTICS rather than inventing a percentage.
+Reads use their own command numbers — write + `0x10` — and the full table is
+in [Read path](#read-path) below. The `0x10` reply carries the battery level at
+`[13]`, charging at `[12]`, link state at `[14]` and, over USB only, the
+firmware BCD at `[8..9]`. DIAGNOSTICS shows both the parsed values and the raw
+bytes.
 
 ## Feature set from the device descriptor
 
@@ -268,12 +252,12 @@ not implemented here.
 | Cmd | Function | byte 4 | Payload | Confidence |
 |---|---|---|---|---|
 | `0x02` | Report rate | `1` | `[rate]`, `1000 / hz` (125→`08`, 1000→`01`) | verified |
-| `0x03` | DPI stages | `0x25` | 6 x 4 bytes at `[6..29]` | verified |
+| `0x03` | DPI stages | `0x25` | `[5]=count`, 6 x 4 bytes at `[6..29]` | verified |
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
 | `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
 | `0x07` | Power management | `4` | 4 bytes at `[5..8]` | partially verified |
-| `0x08` | Set one key / macro | `n*4+2` | `[5]=key`, then `n` x 4-byte records | verified |
+| `0x08` | Set one key / macro | `n*4+1` | `[5]=key_value`, then `n` x 4-byte records | disassembly, not yet on hardware |
 | `0x09` | Set all keys | `0x0f` | 6 x 3-byte records | verified |
 | `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
 | `0x0F` | Restore factory | `1` | `[5]=0x01`, `[6]=0xFF` | verified |
@@ -296,15 +280,21 @@ settings.
 
 ### DPI — `0x03`
 
-Six 4-byte stage records start at byte 6; bytes 1..5 stay zero. Each record is
-the **encoded** DPI for X and Y, not the value shown in the UI:
+Payload byte 0 is the **active stage count**; six 4-byte stage records follow
+from byte 1. Each record is the **encoded** DPI for X and Y, not the value shown
+in the UI:
 
 ```text
-[6..7]   X code, little endian
-[8..9]   Y code, little endian (same value)
+[5]       active stage count, 1..6
+[6..7]    stage 1 X code, little endian
+[8..9]    stage 1 Y code (same value)
+[10..]    stage 2..6, same layout
 ```
 
-`GetMouseDPIValue @ 0x1D740` produces the code from the display value:
+Selected 1..6 in the vendor UI and the echoed byte walks `01 02 03 04 05 06`.
+The matching read `0x13` returns the count at `[4]`, so both directions work.
+
+`GetMouseDPIValue @ 0x1D740` produces the stage code from the display value:
 
 ```text
 dpi <= 10000         ->  dpi / 50
@@ -401,23 +391,60 @@ record 3):
 | `0x80` | consumer control | HID usage: `E9` vol+, `EA` vol-, `E2` mute, `CD` play/pause, `B5` next, `B6` prev, `B7` stop |
 | `0x40` | special | `01` = DPI loop |
 | `0x60` | disabled | `00` |
+| `0x90` | macro slot | `key_value \| mode flag`, third byte = repeat count |
 | `0x70` | keyboard | modifier + scancode (from `SetMouseKeyMacroData`, not fully decoded) |
+
+For `0x90`, the mode flag is `0x10` play once (also used by the vendor's
+“hold” type), `0x20` repeat N times, or `0x40` toggle. The count byte is only
+meaningful for repeat. Recovered from `SetMouseKeyMacroData @ 0x33EA0`; not yet
+confirmed on hardware.
 
 The length byte is `0x0f` (15) even though 18 bytes of records follow — copied
 verbatim, since that is what the vendor sends and the device accepts.
 
 ### Keys and macros — `0x08`
 
-`SetMouseKeyMacroData(int key, int profile) @ 0x34930` builds:
+`SetMouseKeyMacroData(key_value, macro_id) @ 0x34930` builds one packet per key:
 
 ```text
-00 08 00 01 (n*4+2) key  r0 r1 r2 r3  r4 r5 r6 r7 ...
+00 08 00 01 (n*4+1) key  r0 r1 r2 r3  r4 r5 r6 r7 ...
 ```
 
-`n` is the record count, capped at 6 by `GetMouseMacroData`. Keyboard records
-are encoded `[0x30][0x01][0x00][flash_key_code]`, with a `[0x20]` variant for
-modifiers; delays pack into the middle bytes. This is the per-key / macro path;
-the simple bindings use `0x09` above.
+`n` is the event count, `key` is the wire `key_value` whose macro slot is being
+written, and the length byte is `n*4+1` — the key byte plus the records. The
+vendor chunks sequences longer than six events across several `0x08` writes,
+using byte 3 as a chunk marker and byte 4 as that chunk's length; this studio
+caps the sequence at six events.
+
+Each record is four bytes, decoded from `GetMouseMacroData @ 0x1C280`:
+
+```text
+[0]   class       [1..2] delay after this event, little endian ms   [3] parameter
+```
+
+| Class | Meaning | Parameter |
+|---|---|---|
+| `0x30` | keyboard key down | USB HID keyboard usage |
+| `0xB0` | keyboard key up | same usage |
+| `0x20` | modifier down | mouse modifier bitmap |
+| `0xA0` | modifier up | same bitmap |
+| `0x10` | mouse button down | `01` left, `02` right, `04` middle, `08` back, `10` forward |
+| `0x90` | mouse button up | same button bit |
+
+The delay lives in the record it follows, so the last record can carry a
+trailing pause. `1` is the firmware's minimum. Modifier bits from
+`GetSysKeyCode @ 0x4DDB0`: left shift `0x20`, right shift `0x01`, left ctrl
+`0x10`, right ctrl `0x04`, left alt `0x40`, right alt `0x80`, left win `0x08`,
+right win `0x02`.
+
+The simple button bindings still use `0x09` above; `0x08` only carries the
+macro body. Writing a macro therefore takes two commands: `0x08` for the key's
+slot, then `0x09` with that key's record set to `90 <key_value | mode> <loops>`.
+
+There is no read counterpart for `0x08` in the launch sweep, and the vendor
+tool keeps macro bodies in its local SQLite database rather than reading them
+back. The studio can therefore read the `0x09` binding and label the key
+**Macro**, but it cannot display a macro body configured by another tool.
 
 ### Reset / factory
 
@@ -443,7 +470,7 @@ them, but the command is what selects a read:
 | `0x10` | — | 32 B | device info: `[13]` battery, `[12]` charging, `[14]` link, `[10]` type |
 | `0x11` | `0x09` | 18 B | six 3-byte key records, `key_value` order |
 | `0x12` | `0x02` | 1 B | report rate code at `[4]` |
-| `0x13` | `0x03` | 25 B | six 4-byte DPI codes at `[5]`, `[9]`, … |
+| `0x13` | `0x03` | 25 B | active stage count at `[4]`, six 4-byte DPI codes at `[5]`, `[9]`, … |
 | `0x14` | `0x04` | 18 B | six RGB triples at `[4]` |
 | `0x15` | `0x05` | 24 B | lighting (unused on this model) |
 | `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |
@@ -464,21 +491,20 @@ sleep 30, wake on, closelight off — matching the 4-byte write of `0x07`. And
 right, middle, back, forward, DPI loop — and record 3 is Backward / record 4 is
 Forward, exactly as `key_value` dictates.
 
-### `0x20` — mouse firmware
+### `0x20` — firmware
 
-`GetMouseData` formats bytes 4 and 5 with `%X%02X`, then shows the first
-character as the major version and the last two as the minor, under language id
-**551 = "Mouse Firmware"**:
+Bytes 4 and 5 are BCD: byte 5 is the major, byte 4 the minor.
 
 ```text
-20 00 01 02 26 03  ->  "2603"  ->  2.03
-20 00 01 02 01 83  ->  "183"   ->  1.83
+20 00 01 02 26 03  ->  0x03 . 0x26  ->  3.26
 ```
 
-The **dongle** version is not in the protocol at all. `v1.83` is the USB
-device descriptor's `bcdDevice` (`0x0183`) — `hid_probe.py` prints it, but
-WebHID does not expose it, so the browser studio can only show the mouse
-firmware.
+That matches the USB descriptor's `bcdDevice = 0x0326` exactly. Over USB the
+same pair also shows up in the `0x10` reply at `[8..9]`; over 2.4 GHz those
+bytes are zero and only `0x20` carries the firmware, because the radio is
+reporting the mouse on the far side of the dongle.
+
+The vendor formats it with `%X%02X` and language id 551 ("Mouse Firmware").
 
 The studio runs this same sweep on connect and on **SYNC**, so the UI reflects
 the mouse rather than the stored profile.

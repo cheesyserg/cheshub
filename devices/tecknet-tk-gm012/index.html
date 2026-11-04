@@ -57,8 +57,8 @@
         <span class="fw-tag" id="header-fw">FW: --</span>
       </div>
       <div class="header-actions">
-        <button class="btn-ghost font-impact" id="btn-sync" type="button">SYNC</button>
-        <button class="btn-primary font-impact" id="btn-connect" type="button">CONNECT / APPLY</button>
+        <button class="btn-ghost font-impact" id="btn-sync" type="button" title="Read the whole configuration back from the mouse">SYNC</button>
+        <button class="btn-primary font-impact" id="btn-connect" type="button" title="Connect, or write report rate, DPI, colours and power">CONNECT / APPLY</button>
       </div>
     </header>
 
@@ -136,9 +136,10 @@
               </div>
               <p class="section-note">
                 Writes command <code>0x09</code> with six 3-byte records in
-                <code>key_value</code> order. Mouse buttons, media keys, DPI loop and
-                disable are encoded; keyboard and macro actions are not yet decoded and
-                are refused rather than sent wrong.
+                <code>key_value</code> order. Mouse buttons, media keys, DPI loop,
+                disable and macro slots are encoded. Macro slots take their body from
+                the <strong>MACRO</strong> tab; keyboard and system-shortcut actions are
+                not decoded yet and are refused rather than sent wrong.
               </p>
             </div>
           </div>
@@ -148,6 +149,18 @@
             <div class="panel-section">
               <div class="section-title font-impact">DPI SENSITIVITY</div>
               <div class="section-desc">Six stages, 50 to 24000 CPI. The active stage lights up on the mouse.</div>
+
+              <div class="dpi-toolbar">
+                <label class="inline-label" for="sel-dpi-count">DPI COUNT</label>
+                <select id="sel-dpi-count" class="select-compact">
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6" selected>6</option>
+                </select>
+              </div>
 
               <div class="dpi-grid" id="dpi-grid"></div>
 
@@ -236,7 +249,9 @@
           <div class="tab-panel" id="tab-macro">
             <div class="panel-section">
               <div class="section-title font-impact">MACRO RECORDER</div>
-              <div class="section-desc">Capture keystrokes while this page has focus, then review the sequence.</div>
+              <div class="section-desc">Capture keystrokes while this page has focus, add pauses,
+                then upload the sequence to one of the six buttons. The mouse plays it back on
+                its own — nothing keeps running here.</div>
 
               <div class="section-actions">
                 <button class="btn-primary font-impact" id="btn-record" type="button">RECORD</button>
@@ -245,16 +260,42 @@
 
               <div class="macro-toolbar">
                 <label class="inline-label" for="inp-delay">DELAY (MS)</label>
-                <input type="number" id="inp-delay" class="input-compact" value="100" min="1" max="5000">
+                <input type="number" id="inp-delay" class="input-compact" value="100" min="1" max="31000">
                 <button class="btn-ghost font-impact small" id="btn-add-delay" type="button">ADD DELAY</button>
               </div>
 
               <div class="macro-steps" id="macro-steps"></div>
+              <div class="macro-summary" id="macro-summary">0 events</div>
+
+              <div class="macro-toolbar macro-bind">
+                <label class="inline-label" for="sel-macro-key">BIND TO</label>
+                <select id="sel-macro-key" class="select-compact"></select>
+                <label class="inline-label" for="sel-macro-mode">MODE</label>
+                <select id="sel-macro-mode" class="select-compact">
+                  <option value="once">Play once · 0x10</option>
+                  <option value="repeat">Repeat N · 0x20</option>
+                  <option value="toggle">Toggle · 0x40</option>
+                </select>
+                <label class="inline-label" for="inp-macro-count">TIMES</label>
+                <input type="number" id="inp-macro-count" class="input-compact" value="1" min="1" max="255" disabled>
+              </div>
+
+              <div class="section-actions">
+                <button class="btn-primary font-impact" id="btn-upload-macro" type="button">UPLOAD TO MOUSE</button>
+                <button class="btn-ghost font-impact" id="btn-unbind-macro" type="button">RESTORE KEY BINDING</button>
+              </div>
 
               <p class="section-note">
-                The mouse stores at most six 4-byte records per key
-                (<code>GetMouseMacroData</code> caps the count). Playback happens on the
-                mouse itself — nothing runs here after upload.
+                Events are encoded as four-byte records: class, delay, HID usage. The
+                delay belongs to the event it follows, so the last event can hold a
+                trailing pause. This studio caps a macro at six events (25 payload
+                bytes); the vendor chunks longer sequences across several
+                <code>0x08</code> writes. Modifier keys use the mouse's own eight-slot
+                bitmap; the mode flags on the <code>0x90</code> binding
+                (<code>0x10</code> once, <code>0x20</code> repeat, <code>0x40</code>
+                toggle) come from the vendor binary. <strong>CLEAR</strong> only clears
+                the editor; <strong>RESTORE KEY BINDING</strong> writes the default
+                action back to the mouse.
               </p>
             </div>
           </div>

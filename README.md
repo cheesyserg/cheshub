@@ -29,7 +29,9 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Six DPI stages (50–24000) with per-stage indicator colour
 - Report rate 125 / 250 / 500 / 1000 Hz
 - Sleep timeout and move wake-up
-- Macro recorder, named profile slots, factory restore
+- Macro recorder with keyboard/modifier events (up to six), per-key upload and
+  once / repeat / toggle playback
+- Named profile slots, factory restore
 
 Which features exist at all is defined by the vendor's own
 `device/mouse_tk-gm012.xml`, not by guesswork: `<menu light="0"/>` means there
@@ -62,7 +64,7 @@ Noise cancellation engine and hardware DSP equaliser over Bluetooth RFCOMM.
 
 | | |
 |---|---|
-| Browser | Chrome or Edge 89+ on desktop (WebHID + Web Serial) |
+| Browser | Chrome or Edge 98+ on desktop (WebHID + Web Serial, `structuredClone`) |
 | Firefox / Safari | Not supported — the APIs do not exist there |
 | Context | HTTPS or `localhost`. WebHID refuses insecure origins |
 | OS | Windows, macOS, Linux |

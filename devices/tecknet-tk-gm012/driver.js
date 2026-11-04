@@ -52,7 +52,7 @@ const CMD = {
   DPI: 0x03,
   DPI_COLOR: 0x04,
   POWER: 0x07,
-  KEY_ONE: 0x08,
+  KEY_MACRO: 0x08,
   KEY_ALL: 0x09,
   LIGHT_RESET: 0x0E,
   FACTORY: 0x0F,
@@ -138,6 +138,59 @@ const KEY_RECORDS = {
   "Disable Key": [0x60, 0x00, 0x00]
 };
 
+/* Macro records (command 0x08), recovered from
+   DeviceMainDlg::GetMouseMacroData @ 0x1C280. Each event is four bytes:
+
+     [0] class   [1..2] delay after the event, LE ms   [3] parameter
+
+   0x30 keyboard down   0xB0 keyboard up   parameter = HID keyboard usage
+   0x20 modifier down   0xA0 modifier up   parameter = modifier bit
+   0x10 mouse down      0x90 mouse up      parameter = HID button bit
+
+   The delay sits in the record it follows, so the final event can carry a
+   trailing pause. Delay 1 ms is the vendor's minimum. */
+const MACRO_ACTIONS = {
+  keyboardDown: 0x30, keyboardUp: 0xB0,
+  modifierDown: 0x20, modifierUp: 0xA0
+};
+
+/* KeyboardEvent.code -> USB HID keyboard usage, the values
+   ProtocolData::GetFlashKeyCode @ 0x4D7A0 returns for Windows VKs. */
+const HID_USAGE = (() => {
+  const map = {
+    Enter: 0x28, Escape: 0x29, Backspace: 0x2A, Tab: 0x2B, Space: 0x2C,
+    Minus: 0x2D, Equal: 0x2E, BracketLeft: 0x2F, BracketRight: 0x30,
+    Backslash: 0x31, Semicolon: 0x33, Quote: 0x34, Backquote: 0x35,
+    Comma: 0x36, Period: 0x37, Slash: 0x38, CapsLock: 0x39,
+    PrintScreen: 0x46, ScrollLock: 0x47, Pause: 0x48, Insert: 0x49,
+    Home: 0x4A, PageUp: 0x4B, Delete: 0x4C, End: 0x4D, PageDown: 0x4E,
+    ArrowRight: 0x4F, ArrowLeft: 0x50, ArrowDown: 0x51, ArrowUp: 0x52,
+    NumLock: 0x53, NumpadDivide: 0x54, NumpadMultiply: 0x55,
+    NumpadSubtract: 0x56, NumpadAdd: 0x57, NumpadEnter: 0x58,
+    NumpadDecimal: 0x63, IntlBackslash: 0x64, ContextMenu: 0x65,
+    NumpadEqual: 0x67
+  };
+  for (let i = 0; i < 26; i++) map[`Key${String.fromCharCode(65 + i)}`] = 0x04 + i;
+  for (let i = 0; i < 9; i++) map[`Digit${i + 1}`] = 0x1E + i;
+  map.Digit0 = 0x27;
+  for (let i = 1; i <= 12; i++) map[`F${i}`] = 0x39 + i;
+  for (let i = 1; i <= 9; i++) map[`Numpad${i}`] = 0x58 + i;
+  map.Numpad0 = 0x62;
+  return map;
+})();
+
+/* ProtocolData::GetSysKeyCode @ 0x4DDB0 returns these bits for the modifier
+   VKs. The mouse tracks eight modifier slots, so each physical modifier gets
+   its own bit. */
+const MODIFIER_BITS = {
+  ShiftLeft: 0x20, ShiftRight: 0x01,
+  ControlLeft: 0x10, ControlRight: 0x04,
+  AltLeft: 0x40, AltRight: 0x80,
+  MetaLeft: 0x08, MetaRight: 0x02
+};
+
+const MACRO_MAX_EVENTS = 6;   // 6 * 4 + 1 = 25 bytes, inside the 27-byte payload
+
 const DEFAULTS = {
   dpi: [
     { value: 800,   color: "#FF0000" },
@@ -148,6 +201,7 @@ const DEFAULTS = {
     { value: 12000, color: "#FF4400" }
   ],
   rate: 1000,         // report_rate default_value="1" == 1000 Hz (code 1)
+  dpiCount: 6,        // dpi_count: payload[0] of 0x03
   sleep: 180,         // sleep_light value="180"
   moveWake: false,    // move_wakeup value="0"
   keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"]
@@ -172,6 +226,9 @@ let outputReportId = 0;
 let sendLayout = null;   // null = unknown, 0 = 32-byte payload, 1 = 33 bytes as-is
 let probing = false;
 let macroSteps = [];
+let macroTarget = 5;          // visual key index; 5 = the DPI-loop key
+let macroMode = "once";      // once | repeat | toggle
+let macroRepeat = 1;
 let recording = false;
 
 const $ = (id) => document.getElementById(id);
@@ -221,17 +278,26 @@ function logWire(dir, bytes) {
   if (el) el.textContent = wireLog.length ? wireLog.join("\n") : "—";
 }
 
-/* One write, then wait for an input report. */
-function exchange(bytes, timeoutMs) {
+/* One write, then wait for an input report that matches the command and has
+   status 0. DriverComm::SetDeviceData does the same: it retries hid_read up to
+   50 times at 30 ms and only accepts `buf[1] == 0`, so a stale or rejected
+   acknowledgement must not be mistaken for the answer. */
+function exchange(bytes, timeoutMs, accept) {
   return new Promise(async (resolve) => {
     let timer = null;
+    let last = null;
     const settle = (reply) => {
+      if (reply && reply.length) last = reply;
+      if (reply && accept && !accept(reply)) return;   // keep waiting
       clearTimeout(timer);
       if (pending === settle) pending = null;
-      resolve(reply);
+      resolve(reply || null);
     };
     pending = settle;
-    timer = setTimeout(() => settle(null), timeoutMs);
+    timer = setTimeout(() => {
+      if (pending === settle) pending = null;
+      resolve(last && accept && !accept(last) ? null : last);
+    }, timeoutMs);
 
     logWire("TX", bytes);
     try {
@@ -264,7 +330,13 @@ function describeReply(cmd, reply) {
   // byte 1 is the status byte: 0 = accepted, 1 = rejected
   const status = reply.length > 1 ? reply[1] : 0xFF;
   lastResult = `0x${cmd.toString(16)} <- ${reply.length} B [${hexOf(reply, 12)}] status=${status}`;
-  return { ok: true, reply, status, silent: false };
+  return {
+    ok: status === 0,
+    reply,
+    status,
+    silent: false,
+    error: status === 0 ? undefined : `device rejected command 0x${cmd.toString(16)} (status ${status})`
+  };
 }
 
 async function sendCommand(cmd, payload, lenByte, opts = {}) {
@@ -274,10 +346,11 @@ async function sendCommand(cmd, payload, lenByte, opts = {}) {
   }
   const frame = buildFrame(cmd, payload, lenByte, opts.isWrite !== false);
   let lastErr = "";
+  const accept = (reply) => reply.length > 1 && reply[0] === cmd && reply[1] === 0;
 
   for (const bytes of candidatePayloads(frame)) {
     lastWriteError = "";
-    const first = await exchange(bytes, FIRST_WAIT);
+    const first = await exchange(bytes, FIRST_WAIT, accept);
     if (lastWriteError) {
       lastErr = lastWriteError;
       continue;                       // wrong report length, try the other form
@@ -286,7 +359,7 @@ async function sendCommand(cmd, payload, lenByte, opts = {}) {
     if (first && first.length) return describeReply(cmd, first);
 
     // Accepted by the OS but quiet so far — give the link a longer window.
-    const second = await exchange(bytes, RETRY_WAIT);
+    const second = await exchange(bytes, RETRY_WAIT, accept);
     if (lastWriteError) {
       lastErr = lastWriteError;
       continue;
@@ -345,6 +418,7 @@ async function readRate() {
 async function readDpi() {
   const res = await sendCommand(CMD.DPI_READ, [], 0, { isWrite: false });
   if (!res.reply || res.reply.length < 29) return false;
+  if (res.reply[4] >= 1 && res.reply[4] <= 6) state.dpiCount = res.reply[4];
   for (let i = 0; i < 6; i++) {
     const base = 5 + i * 4;                 // [4] is the leading zero
     const code = res.reply[base] | (res.reply[base + 1] << 8);
@@ -374,10 +448,20 @@ async function readKeys() {
   }
   for (let value = 0; value < 6; value++) {
     const record = Array.from(res.reply.slice(4 + value * 3, 7 + value * 3));
+    const visual = KEYS.findIndex((k) => k.value === value);
+    if (visual < 0) continue;
+    if (record[0] === 0x90) {
+      // Key binding to a macro slot. [1] = key_value | mode flag, [2] = loops.
+      state.keys[visual] = "Macro";
+      const flag = record[1] & 0xF0;
+      macroMode = flag === 0x20 ? "repeat" : flag === 0x40 ? "toggle" : "once";
+      macroRepeat = record[2] || 1;
+      macroTarget = visual;
+      continue;
+    }
     const name = byRecord.get(record.join(","));
     if (!name) continue;
-    const visual = KEYS.findIndex((k) => k.value === value);
-    if (visual >= 0) state.keys[visual] = name;
+    state.keys[visual] = name;
   }
   return true;
 }
@@ -391,16 +475,15 @@ async function readPower() {
   return true;
 }
 
-/* Command 0x20 returns the mouse firmware. The vendor formats '%X%02X' over
-   bytes 4 and 5, then shows the first character as the major and the last two
-   as the minor: 0x26 0x03 -> "2603" -> 2.03. The dongle's own version is not
-   in the protocol at all — it is the USB bcdDevice (1.83 reads as 0x0183). */
+/* Command 0x20 returns the firmware as BCD: byte 5 is the major, byte 4 the
+   minor. 0x26 0x03 -> 3.26, which matches bcdDevice 0x0326. (Over USB the same
+   pair also appears in the 0x10 reply at [8..9]; over 2.4G those bytes are
+   zero and only 0x20 carries it.) */
 async function readFirmware() {
   const res = await sendCommand(CMD.FIRMWARE, [], 0, { isWrite: false });
   if (!res.reply || res.reply.length < 6) return false;
-  const s = res.reply[4].toString(16).toUpperCase() +
-            res.reply[5].toString(16).padStart(2, "0").toUpperCase();
-  fwVersion = `${s.slice(0, 1)}.${s.slice(-2)}`;
+  const bcd = (b) => `${(b >> 4) & 0x0F}${b & 0x0F}`;
+  fwVersion = `${Number(bcd(res.reply[5]))}.${bcd(res.reply[4])}`;
   return true;
 }
 
@@ -429,6 +512,7 @@ async function applyRate() {
 
 async function applyDpi() {
   const payload = new Array(25).fill(0);
+  payload[0] = Math.max(1, Math.min(6, state.dpiCount));   // active stage count
   for (let i = 0; i < 6; i++) {
     const code = encodeDpi(state.dpi[i].value);
     const base = 1 + i * 4;                    // payload[0] stays zero
@@ -465,9 +549,17 @@ async function applyPower() {
 async function applyKeys() {
   const records = new Array(6);
   for (let i = 0; i < KEYS.length; i++) {
+    const value = KEYS[i].value;
+    if (state.keys[i] === "Macro") {
+      // 0x90 = macro slot. [1] = key_value | mode flag, [2] = repeat count.
+      const flag = macroMode === "repeat" ? 0x20 : macroMode === "toggle" ? 0x40 : 0x10;
+      const loops = macroMode === "repeat" ? Math.max(1, Math.min(255, macroRepeat)) : 0;
+      records[value] = [0x90, value | flag, loops];
+      continue;
+    }
     const record = KEY_RECORDS[state.keys[i]];
     if (!record) return { ok: false, error: `"${state.keys[i]}" is not encodable` };
-    records[KEYS[i].value] = record;
+    records[value] = record;
   }
   const payload = [];
   for (const record of records) payload.push(...record);
@@ -579,6 +671,11 @@ async function autoSwitchToAnswering(device) {
 async function attach(device, announce, allowSwitch) {
   hidDevice = device;
   lastWriteError = "";
+  deviceInfo = null;
+  batteryLevel = null;
+  charging = false;
+  linkState = null;
+  fwVersion = null;
   if (!hidDevice.opened) {
     try {
       await hidDevice.open();
@@ -741,22 +838,25 @@ function isOurs(device) {
 
 function updateHud() {
   const online = !!(hidDevice && hidDevice.opened);
+  const linked = online && !!deviceInfo;
   const dot = $("hud-dot");
   const status = $("hud-status");
   const mode = $("hud-mode");
-  if (dot) dot.classList.toggle("online", online);
-  if (status) status.textContent = online ? "ONLINE" : "STANDBY";
+  if (dot) dot.classList.toggle("online", linked);
+  if (status) status.textContent = !online ? "STANDBY" : (linked ? "ONLINE" : "NO REPLY");
   if (mode) {
     if (!online || !hidDevice) mode.textContent = "NONE";
-    else mode.textContent = hidDevice.vendorId === WIRELESS.vendorId ? "2.4G WIRELESS" : "USB WIRED";
+    else if (hidDevice.vendorId === WIRELESS.vendorId) mode.textContent = "2.4G WIRELESS";
+    else mode.textContent = charging ? "USB · CHARGING" : "USB WIRED";
   }
 
   const text = $("hud-battery-text");
   const bar = $("hud-battery-bar");
   const pct = online ? batteryLevel : null;
   if (text) {
-    if (pct === null) text.textContent = online ? "—" : "--%";
+    if (pct === null) text.textContent = online ? "n/a" : "--%";
     else text.textContent = `${pct}%${charging ? " ⚡" : ""}`;
+    text.style.color = pct !== null && pct <= 20 ? "#ff4655" : "";
   }
   if (bar) {
     bar.style.width = pct === null ? "0%" : `${pct}%`;
@@ -856,6 +956,13 @@ function buildKeySelects() {
       state.keys[i] = select.value;
       const label = $("anchor-label-" + i);
       if (label) label.textContent = `${i + 1}. ${select.value}`;
+      if (select.value === "Macro") {
+        macroTarget = i;
+        const bind = $("sel-macro-key");
+        if (bind) bind.value = String(i);
+        switchTab("tab-macro");
+        showToast("Record a sequence, then UPLOAD TO MOUSE");
+      }
       saveState();
     };
     const label = $("anchor-label-" + i);
@@ -867,7 +974,8 @@ function buildDpiCards() {
   const grid = $("dpi-grid");
   if (!grid) return;
   grid.innerHTML = state.dpi.map((stage, i) => `
-    <button class="dpi-card${i === selectedStage ? " active" : ""}" data-stage="${i}" type="button">
+    <button class="dpi-card${i === selectedStage ? " active" : ""}${i >= state.dpiCount ? " inactive" : ""}"
+            data-stage="${i}" type="button">
       <span class="dpi-card-head" style="background:${stage.color}">DPI ${i + 1}</span>
       <span class="dpi-card-value" style="color:${stage.color}">${stage.value}</span>
     </button>`).join("");
@@ -899,6 +1007,8 @@ function syncDpiControls() {
   if (badge) badge.textContent = state.dpi[selectedStage].value;
   const color = $("inp-dpi-color");
   if (color) color.value = state.dpi[selectedStage].color;
+  const count = $("sel-dpi-count");
+  if (count) count.value = String(state.dpiCount);
 }
 
 function buildMacroList() {
@@ -915,10 +1025,20 @@ function buildMacroList() {
         </div>`).join("")
     : `<div class="macro-empty">No steps recorded</div>`;
 
+  const events = macroSteps.filter((s) => s.kind === "key").length;
+  const delays = macroSteps.length - events;
+  const summary = $("macro-summary");
+  if (summary) {
+    summary.textContent = `${events}/${MACRO_MAX_EVENTS} events`
+      + (delays ? ` · ${delays} delay step${delays > 1 ? "s" : ""}` : "");
+    summary.classList.toggle("over", events > MACRO_MAX_EVENTS);
+  }
+
   list.querySelectorAll(".macro-del").forEach((btn) => {
     btn.onclick = () => {
       macroSteps.splice(Number(btn.dataset.i), 1);
       buildMacroList();
+      saveMacro();
     };
   });
 }
@@ -940,9 +1060,19 @@ function buildProfiles() {
   list.querySelectorAll("[data-load]").forEach((btn) => {
     btn.onclick = () => {
       const profilesNow = loadProfiles();
-      state = Object.assign(structuredClone(DEFAULTS), profilesNow[btn.dataset.load].state);
+      const saved = profilesNow[btn.dataset.load];
+      if (!saved) return;
+      state = Object.assign(structuredClone(DEFAULTS), saved.state);
+      if (saved.macro) {
+        if (Array.isArray(saved.macro.steps)) macroSteps = saved.macro.steps;
+        if (Number.isInteger(saved.macro.target) && KEYS[saved.macro.target]) macroTarget = saved.macro.target;
+        if (["once", "repeat", "toggle"].includes(saved.macro.mode)) macroMode = saved.macro.mode;
+        if (Number.isInteger(saved.macro.repeat)) macroRepeat = saved.macro.repeat;
+      }
       refreshUI();
-      showToast("Profile loaded");
+      saveState();
+      saveMacro();
+      showToast(saved.macro ? "Profile loaded — upload the macro to write it" : "Profile loaded");
     };
   });
   list.querySelectorAll("[data-del]").forEach((btn) => {
@@ -963,6 +1093,22 @@ function refreshUI() {
   buildMacroList();
   buildProfiles();
 
+  const macroKey = $("sel-macro-key");
+  if (macroKey) {
+    const bound = Array.isArray(state.keys) ? state.keys.indexOf("Macro") : -1;
+    if (bound >= 0) macroTarget = bound;
+    macroKey.innerHTML = KEYS.map((k, i) =>
+      `<option value="${i}">Key ${i + 1} — wire ${k.value}</option>`).join("");
+    macroKey.value = String(macroTarget);
+  }
+  const macroModeSelect = $("sel-macro-mode");
+  if (macroModeSelect) macroModeSelect.value = macroMode;
+  const macroCountInput = $("inp-macro-count");
+  if (macroCountInput) {
+    macroCountInput.value = String(macroRepeat);
+    macroCountInput.disabled = macroMode !== "repeat";
+  }
+
   document.querySelectorAll("#rate-control .seg-btn").forEach((b) => {
     b.classList.toggle("active", Number(b.dataset.rate) === state.rate);
   });
@@ -979,6 +1125,27 @@ function saveState() {
   try {
     localStorage.setItem("tk-gm012.state", JSON.stringify(state));
   } catch (err) { /* storage disabled */ }
+}
+
+function saveMacro() {
+  try {
+    localStorage.setItem("tk-gm012.macro", JSON.stringify({
+      steps: macroSteps, target: macroTarget, mode: macroMode, repeat: macroRepeat
+    }));
+  } catch (err) { /* storage disabled */ }
+}
+
+function loadMacro() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("tk-gm012.macro") || "null");
+    if (!raw) return;
+    if (Array.isArray(raw.steps)) {
+      macroSteps = raw.steps.filter((s) => s && (s.kind === "delay" || s.kind === "key"));
+    }
+    if (Number.isInteger(raw.target) && KEYS[raw.target]) macroTarget = raw.target;
+    if (["once", "repeat", "toggle"].includes(raw.mode)) macroMode = raw.mode;
+    if (Number.isInteger(raw.repeat)) macroRepeat = raw.repeat;
+  } catch (err) { /* ignore */ }
 }
 
 function restoreState() {
@@ -1002,6 +1169,12 @@ function saveProfile() {
   const profiles = loadProfiles();
   profiles[name] = {
     state: structuredClone(state),
+    macro: {
+      steps: structuredClone(macroSteps),
+      target: macroTarget,
+      mode: macroMode,
+      repeat: macroRepeat
+    },
     savedAt: new Date().toISOString().slice(0, 10)
   };
   localStorage.setItem("tk-gm012.profiles", JSON.stringify(profiles));
@@ -1010,6 +1183,132 @@ function saveProfile() {
 }
 
 /* ---------------------------------------------------------------- macros */
+
+/* The mouse stores a macro per key as four-byte events. A delay step between
+   two events is folded into the earlier event's [1..2], which is where the
+   firmware reads it (GetMouseMacroData @ 0x1C280). Delays before the first
+   event have no record to live in and are dropped. */
+function buildMacroRecords() {
+  const events = [];
+  let gap = 0;
+  let droppedLeadDelay = false;
+
+  for (const step of macroSteps) {
+    if (step.kind === "delay") {
+      gap += Math.max(0, Math.round(Number(step.ms) || 0));
+      continue;
+    }
+
+    const modifier = MODIFIER_BITS[step.key];
+    const usage = HID_USAGE[step.key];
+    if (modifier === undefined && usage === undefined) {
+      return { error: `"${step.key}" has no HID usage mapping` };
+    }
+
+    if (events.length) {
+      const ms = Math.max(1, Math.min(0xFFFF, gap || 1));
+      const prev = events[events.length - 1];
+      prev[1] = ms & 0xFF;
+      prev[2] = (ms >> 8) & 0xFF;
+    } else if (gap > 0) {
+      droppedLeadDelay = true;
+    }
+    gap = 0;
+
+    const down = step.type === "down";
+    events.push(modifier !== undefined
+      ? [down ? MACRO_ACTIONS.modifierDown : MACRO_ACTIONS.modifierUp, 1, 0, modifier]
+      : [down ? MACRO_ACTIONS.keyboardDown : MACRO_ACTIONS.keyboardUp, 1, 0, usage]);
+
+    if (events.length > MACRO_MAX_EVENTS) {
+      return { error: `Macro is limited to ${MACRO_MAX_EVENTS} events in this studio` };
+    }
+  }
+
+  if (!events.length) return { error: "Record or add at least one key event" };
+
+  if (gap > 0) {
+    const ms = Math.max(1, Math.min(0xFFFF, gap));
+    const prev = events[events.length - 1];
+    prev[1] = ms & 0xFF;
+    prev[2] = (ms >> 8) & 0xFF;
+  }
+
+  return { records: events, droppedLeadDelay };
+}
+
+async function uploadMacro() {
+  if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
+
+  const select = $("sel-macro-key");
+  const visual = select ? Number(select.value) : macroTarget;
+  if (!KEYS[visual]) return showToast("Pick a key to bind");
+  if (visual <= 1) {
+    const label = visual === 0 ? "left" : "right";
+    if (!confirm(`Bind the macro to the ${label} button? You will need another pointing device if you want to undo this.`)) return;
+  }
+
+  const built = buildMacroRecords();
+  if (built.error) return showToast(built.error);
+
+  macroMode = $("sel-macro-mode")?.value || macroMode;
+  macroRepeat = Math.max(1, Math.min(255, Math.round(Number($("inp-macro-count")?.value) || 1)));
+  macroTarget = visual;
+  saveMacro();
+
+  const target = KEYS[visual].value;
+  const payload = [target];
+  for (const record of built.records) payload.push(...record);
+
+  setBusy(true);
+  await readDeviceInfo();          // wake the link the way the vendor does
+  const written = await sendCommand(CMD.KEY_MACRO, payload, built.records.length * 4 + 1);
+  if (!written.ok) {
+    setBusy(false);
+    updateDiagnostics();
+    return showToast(written.error || "Macro write failed");
+  }
+
+  // This studio edits one macro slot at a time. Any other key still pointing
+  // at a macro goes back to its vendor default so it cannot run an empty slot.
+  let restored = 0;
+  for (let i = 0; i < KEYS.length; i++) {
+    if (i !== visual && state.keys[i] === "Macro") {
+      state.keys[i] = DEFAULTS.keys[i];
+      restored++;
+    }
+  }
+  state.keys[visual] = "Macro";
+
+  const bound = await applyKeys();
+  setBusy(false);
+  refreshUI();
+  saveState();
+  updateDiagnostics();
+
+  if (!bound.ok) return showToast(bound.error || "Macro stored, but the key binding failed");
+  if (built.droppedLeadDelay) {
+    showToast(`Macro bound to key ${visual + 1}; leading delay ignored`);
+  } else if (written.silent) {
+    showToast(`Macro sent to key ${visual + 1} (no ack)`);
+  } else {
+    showToast(`Macro bound to key ${visual + 1}${restored ? "; previous macro key restored" : ""}`);
+  }
+}
+
+async function unbindMacro() {
+  const select = $("sel-macro-key");
+  const visual = select ? Number(select.value) : macroTarget;
+  if (!KEYS[visual]) return showToast("Pick a key");
+  state.keys[visual] = DEFAULTS.keys[visual];
+  buildKeySelects();
+  saveState();
+  saveMacro();
+  const res = await applyKeys();
+  updateDiagnostics();
+  showToast(res.ok ? `Key ${visual + 1} restored to ${state.keys[visual]}`
+                   : (res.error || "Binding write failed"));
+}
 
 function isTypingTarget(el) {
   return el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
@@ -1020,6 +1319,7 @@ function startRecording() {
   recording = true;
   macroSteps = [];
   buildMacroList();
+  saveMacro();
   const btn = $("btn-record");
   if (btn) btn.classList.add("recording");
   showToast("Recording — Esc to stop");
@@ -1030,6 +1330,7 @@ function stopRecording() {
   const btn = $("btn-record");
   if (btn) btn.classList.remove("recording");
   buildMacroList();
+  saveMacro();
 }
 
 function macroKeyHook(event) {
@@ -1038,6 +1339,7 @@ function macroKeyHook(event) {
     stopRecording();
     return;
   }
+  if (event.repeat) return;
   event.preventDefault();
   macroSteps.push({
     kind: "key",
@@ -1045,12 +1347,14 @@ function macroKeyHook(event) {
     key: event.code || "KeyA"
   });
   buildMacroList();
+  saveMacro();
 }
 
 /* ------------------------------------------------------------------- wiring */
 
 document.addEventListener("DOMContentLoaded", () => {
   restoreState();
+  loadMacro();
   refreshUI();
   updateHud();
   updateDiagnostics();
@@ -1062,6 +1366,7 @@ document.addEventListener("DOMContentLoaded", () => {
     deviceInfo = null;
     batteryLevel = null;
     charging = false;
+    linkState = null;
     fwVersion = null;
     stopPolling();
     updateHud();
@@ -1120,8 +1425,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const res = await restoreFactory();
     state = structuredClone(DEFAULTS);
     selectedStage = DEFAULT_STAGE;
+    macroSteps = [];
+    macroTarget = 5;
+    macroMode = "once";
+    macroRepeat = 1;
     refreshUI();
     saveState();
+    saveMacro();
     updateDiagnostics();
     showToast(res.ok ? "Factory defaults restored" : (res.error || "No response"));
   });
@@ -1130,6 +1440,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
     const res = await readDeviceInfo();
     deviceInfo = res.reply || deviceInfo;
+    updateHud();
     updateDiagnostics();
     showToast(res.reply
       ? `Device answered: ${res.reply.length} B`
@@ -1194,6 +1505,14 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDiagnostics();
   });
 
+  $("sel-dpi-count")?.addEventListener("change", async (e) => {
+    state.dpiCount = Number(e.target.value);
+    buildDpiCards();
+    saveState();
+    await applyDpi();
+    updateDiagnostics();
+  });
+
   $("sel-sleep")?.addEventListener("change", async (e) => {
     state.sleep = Number(e.target.value);
     saveState();
@@ -1212,15 +1531,37 @@ document.addEventListener("DOMContentLoaded", () => {
     if (recording) stopRecording(); else startRecording();
   });
 
+  $("sel-macro-key")?.addEventListener("change", (e) => {
+    macroTarget = Number(e.target.value);
+    saveMacro();
+  });
+
+  $("sel-macro-mode")?.addEventListener("change", (e) => {
+    macroMode = e.target.value;
+    const count = $("inp-macro-count");
+    if (count) count.disabled = macroMode !== "repeat";
+    saveMacro();
+  });
+
+  $("inp-macro-count")?.addEventListener("input", (e) => {
+    macroRepeat = Math.max(1, Math.min(255, Math.round(Number(e.target.value) || 1)));
+    saveMacro();
+  });
+
+  $("btn-upload-macro")?.addEventListener("click", uploadMacro);
+  $("btn-unbind-macro")?.addEventListener("click", unbindMacro);
+
   $("btn-add-delay")?.addEventListener("click", () => {
-    const ms = Number($("inp-delay")?.value || 100);
+    const ms = Math.max(1, Math.min(31000, Math.round(Number($("inp-delay")?.value) || 100)));
     macroSteps.push({ kind: "delay", ms });
     buildMacroList();
+    saveMacro();
   });
 
   $("btn-clear-macro")?.addEventListener("click", () => {
     macroSteps = [];
     buildMacroList();
+    saveMacro();
   });
 
   $("btn-save-profile")?.addEventListener("click", saveProfile);
