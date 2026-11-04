@@ -372,6 +372,27 @@ read state back. Settings live in the browser profile and are only written.
 `cmd get password` hints at an auth step in `FirmUpgradeOTAStart` /
 `FirmUpgradeOTASendData`; firmware OTA is out of scope here.
 
+## Probing the hardware
+
+`tools/hid_probe.py` talks to the device through `hidapi` — the same library
+the vendor tool uses — so it bypasses WebHID, Chromium and the browser picker
+entirely. It is the fastest way to tell "the device is not answering" apart
+from "the browser cannot send this".
+
+```bash
+pip install hidapi
+python tools/hid_probe.py              # list the four interfaces
+python tools/hid_probe.py --probe      # 0x10 read, then 0x02 write, on the vendor collection
+python tools/hid_probe.py --probe --all  # try every interface
+python tools/hid_probe.py --listen 10    # dump input reports for 10 s
+python tools/hid_probe.py --send "02 00 01 01 04"   # inject one frame
+```
+
+`hid_write` pads short buffers up to the report length, so the script always
+puts the same bytes on the wire the vendor tool would. Note it observes the
+device, not the vendor process — to capture what the official tool sends you
+need USBPcap + Wireshark, or an API monitor on its `WriteFile` calls.
+
 ## Reproducing
 
 With the `re/` tooling from the reverse-engineering workspace:

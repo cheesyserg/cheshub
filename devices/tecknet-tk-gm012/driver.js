@@ -473,9 +473,10 @@ function pageKind(device) {
 }
 
 /* Collection with no output report cannot carry the protocol at all — the
-   consumer-control interface is exactly this case. */
+   consumer-control interface is exactly this case. inputReports/outputReports
+   are arrays in WebHID, not Sets. */
 function hasOutputReport(device) {
-  return (device.collections || []).some((c) => c.outputReports.size > 0);
+  return (device.collections || []).some((c) => (c.outputReports || []).length > 0);
 }
 
 /* The vendor always writes report id 0. If a unit's descriptor does not
@@ -486,8 +487,9 @@ function pickReportId(device) {
     for (const r of c.outputReports || []) ids.push(r.reportId);
   }
   const unique = [...new Set(ids)];
+  // Prefer 0, which is what the vendor writes; otherwise the smallest declared.
   if (unique.includes(0)) return 0;
-  return unique.length ? unique[0] : 0;
+  return unique.length ? Math.min(...unique) : 0;
 }
 
 async function autoConnect() {
@@ -584,7 +586,7 @@ function updateDiagnostics() {
         <span>usage</span>
         <code>0x${c.usage.toString(16).toUpperCase()}</code>
         <span class="diag-flag ${c.usagePage >= 0xFF00 ? "ok" : ""}">
-          ${c.inputReports.size} in / ${c.outputReports.size} out / ${c.featureReports.size} feat
+          ${(c.inputReports || []).length} in / ${(c.outputReports || []).length} out / ${(c.featureReports || []).length} feat
         </span>
       </div>`);
     list.innerHTML = rows.length ? rows.join("")
