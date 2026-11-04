@@ -19,7 +19,7 @@
       <div class="nav-section-title">ACTIVE HARDWARE</div>
       <div class="nav-item active font-impact" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">BUTTONS</div>
       <div class="nav-item font-impact" id="nav-tab-performance" onclick="switchTab('tab-performance')">PERFORMANCE</div>
-      <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER / SENSOR</div>
+      <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER</div>
       <div class="nav-item font-impact" id="nav-tab-macro" onclick="switchTab('tab-macro')">MACRO</div>
       <div class="nav-item font-impact" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">PROFILES</div>
 
@@ -68,57 +68,37 @@
         <div class="visualizer-col">
           <div class="mouse-stage">
             <svg class="stage-svg" viewBox="0 0 480 480" aria-hidden="true">
-              <polyline points="152,82 200,82 208,104"/>
-              <polyline points="328,82 280,82 272,104"/>
-              <polyline points="328,156 302,156 294,142"/>
-              <polyline points="152,218 188,218 196,206"/>
-              <polyline points="152,284 190,284 198,272"/>
-              <polyline points="328,284 294,284 286,266"/>
+              <polyline points="152,82 205,82 214,108"/>
+              <polyline points="328,82 275,82 266,108"/>
+              <polyline points="328,156 280,156 272,146"/>
+              <polyline points="152,218 205,218 214,208"/>
+              <polyline points="152,284 208,284 216,276"/>
+              <polyline points="328,284 272,284 264,268" stroke-dasharray="5 4"/>
             </svg>
 
-            <svg class="mouse-svg" viewBox="0 0 240 380" aria-hidden="true">
-              <defs>
-                <linearGradient id="shell" x1="0" y1="0" x2="0.65" y2="1">
-                  <stop offset="0" stop-color="#2b3846"/>
-                  <stop offset="0.45" stop-color="#18212b"/>
-                  <stop offset="1" stop-color="#0b1016"/>
-                </linearGradient>
-                <linearGradient id="gloss" x1="0" y1="0" x2="1" y2="0">
-                  <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
-                  <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
-                  <stop offset="1" stop-color="#000000" stop-opacity="0.35"/>
-                </linearGradient>
-              </defs>
-              <path class="shell" d="M120 8c50 0 84 50 84 126v104c0 72-36 134-84 134s-84-62-84-134V134C36 58 70 8 120 8z"/>
-              <path class="gloss" d="M120 8c50 0 84 50 84 126v104c0 72-36 134-84 134s-84-62-84-134V134C36 58 70 8 120 8z"/>
-              <line class="seam" x1="120" y1="10" x2="120" y2="112"/>
-              <line class="seam" x1="38" y1="112" x2="202" y2="112"/>
-              <rect class="wheel" x="111" y="50" width="18" height="54" rx="9"/>
-              <rect class="side-btn" x="28" y="150" width="14" height="28" rx="7"/>
-              <rect class="side-btn" x="28" y="186" width="14" height="28" rx="7"/>
-              <path class="logo" d="M120 300l14-18 14 18-14 9z"/>
-            </svg>
-
-            <div class="dpi-slit-led" id="live-led"></div>
+            <div class="device-frame">
+              <img class="mouse-img" src="mouse_tk-gm012.png" alt="TECKNET TK-GM012">
+              <span class="dpi-slit-led" id="live-led"></span>
+            </div>
 
             <div class="btn-anchor" id="anchor-0">
-              <span class="btn-anchor-label" id="anchor-label-0">1. Left Click</span>
+              <span class="btn-anchor-label" id="anchor-label-0">1. Left-Click</span>
               <select id="btn-select-0"></select>
             </div>
             <div class="btn-anchor" id="anchor-1">
-              <span class="btn-anchor-label" id="anchor-label-1">2. Right Click</span>
+              <span class="btn-anchor-label" id="anchor-label-1">2. Right-Click</span>
               <select id="btn-select-1"></select>
             </div>
             <div class="btn-anchor" id="anchor-2">
-              <span class="btn-anchor-label" id="anchor-label-2">3. Middle Click</span>
+              <span class="btn-anchor-label" id="anchor-label-2">3. Middle-Click</span>
               <select id="btn-select-2"></select>
             </div>
             <div class="btn-anchor" id="anchor-3">
-              <span class="btn-anchor-label" id="anchor-label-3">4. Backward</span>
+              <span class="btn-anchor-label" id="anchor-label-3">4. Forward</span>
               <select id="btn-select-3"></select>
             </div>
             <div class="btn-anchor" id="anchor-4">
-              <span class="btn-anchor-label" id="anchor-label-4">5. Forward</span>
+              <span class="btn-anchor-label" id="anchor-label-4">5. Backward</span>
               <select id="btn-select-4"></select>
             </div>
             <div class="btn-anchor" id="anchor-5">
@@ -140,14 +120,15 @@
           <div class="tab-panel active" id="tab-buttons">
             <div class="panel-section">
               <div class="section-title font-impact">BUTTON FUNCTION</div>
-              <div class="section-desc">Assign an action to each of the six physical buttons.</div>
+              <div class="section-desc">Assign an action to each of the six physical buttons. Wire index
+                (key_value) is shown per row — keys 4 and 5 are swapped relative to visual order.</div>
               <div class="key-grid">
-                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint">Left button</span></div>
-                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint">Right button</span></div>
-                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint">Wheel click</span></div>
-                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint">Side, front</span></div>
-                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint">Side, rear</span></div>
-                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint">DPI loop</span></div>
+                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint">Left button · value 0</span></div>
+                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint">Right button · value 1</span></div>
+                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint">Wheel click · value 2</span></div>
+                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint">Side, front · value 4</span></div>
+                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint">Side, rear · value 3</span></div>
+                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint">DPI loop · value 5</span></div>
               </div>
               <div class="section-actions">
                 <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">RESET ALL KEYS</button>
@@ -236,54 +217,21 @@
                   <div class="form-label">Move wake-up</div>
                   <div class="form-hint">Wake the mouse as soon as it is moved.</div>
                 </div>
-                <label class="toggle"><input type="checkbox" id="chk-wake" checked><span class="slider"></span></label>
+                <label class="toggle"><input type="checkbox" id="chk-wake"><span class="slider"></span></label>
               </div>
 
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Light off when idle</div>
-                  <div class="form-hint">Extinguish the LED while asleep.</div>
-                </div>
-                <label class="toggle"><input type="checkbox" id="chk-closelight"><span class="slider"></span></label>
-              </div>
-            </div>
-
-            <div class="panel-section">
-              <div class="section-title font-impact">SENSOR</div>
-              <div class="section-desc">Lift-off distance and the two sensor option bits.</div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Lift-off distance</div>
-                  <div class="form-hint">Height at which tracking stops.</div>
-                </div>
-                <div class="segmented" id="lod-control">
-                  <button class="seg-btn active" data-lod="1" type="button">1 MM</button>
-                  <button class="seg-btn" data-lod="2" type="button">2 MM</button>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Sensor option A</div>
-                  <div class="form-hint">Bit 8 of <code>sensor_flag</code>.</div>
-                </div>
-                <label class="toggle"><input type="checkbox" id="chk-sensor-a" checked><span class="slider"></span></label>
-              </div>
-
-              <div class="form-row">
-                <div class="form-info">
-                  <div class="form-label">Sensor option B</div>
-                  <div class="form-hint">Bit 4 of <code>sensor_flag</code>.</div>
-                </div>
-                <label class="toggle"><input type="checkbox" id="chk-sensor-b"><span class="slider"></span></label>
-              </div>
+              <p class="section-note">
+                Factory default is <code>sleep_light = 180</code> and
+                <code>move_wakeup = 0</code>. The mouse keeps an idle LED
+                cutoff of its own; this model exposes no control for it
+                (<code>move_closelight</code> stays at the vendor default).
+              </p>
             </div>
 
             <div class="panel-section danger-zone">
               <div class="section-title font-impact">RESTORE</div>
-              <div class="section-desc">Writes <code>0x0F 01 FF</code>, which resets DPI, lighting,
-                keys and power settings on the mouse.</div>
+              <div class="section-desc">Writes <code>0x0F 01 FF</code>, which resets DPI, keys
+                and power settings on the mouse.</div>
               <button class="btn-ghost font-impact" id="btn-factory" type="button">RESTORE FACTORY DEFAULTS</button>
             </div>
           </div>

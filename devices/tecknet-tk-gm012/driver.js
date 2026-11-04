@@ -1,6 +1,8 @@
 /* TECKNET TK-GM012 — ChesHub driver
  *
- * Protocol recovered from the vendor tool; see PROTOCOL.md.
+ * Feature set and defaults come from the vendor's device descriptor,
+ * device/mouse_tk-gm012.xml, and the action labels from language/1033.lan.
+ * Wire protocol: see PROTOCOL.md.
  *
  * Frame (verified):
  *   [0] report id 0x00   [1] command   [2] 0x00   [3] 0x01
@@ -8,10 +10,9 @@
  *   [32] checksum = sum(5..31) & 0xFF
  *
  * The vendor binds to one specific HID collection: DriverComm::FindDevice at
- * 0x4C3A0 rejects every interface whose hid_device_info.usage_page is not
- * 0xFFEF, or whose usage is not 0. Pairing the boot mouse/keyboard collection
- * instead produces writes that are silently ignored, so the filter below is
- * intentionally narrow.
+ * 0x4C3A0 rejects every interface whose usage_page is not 0xFFEF or whose
+ * usage is not 0. Pairing a boot mouse/keyboard collection instead produces
+ * writes the firmware silently drops, so the filter below is narrow.
  */
 
 const VENDOR_USAGE_PAGE = 0xFFEF;
@@ -20,21 +21,16 @@ const VENDOR_USAGE = 0x00;
 const WIRED = { vendorId: 0x248A, productId: 0x5D2E };
 const WIRELESS = { vendorId: 0x249A, productId: 0x5C2F };
 
-/* Preferred: only the vendor collection the firmware answers on. */
 const FILTERS = [
   { ...WIRED, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE },
   { ...WIRELESS, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE }
 ];
-
-/* Fallback for the "show all interfaces" button, when a unit exposes the
-   vendor page differently. */
 const FILTERS_ANY = [WIRED, WIRELESS];
 
 const CMD = {
   RATE: 0x02,
   DPI: 0x03,
   DPI_COLOR: 0x04,
-  SENSOR: 0x06,
   POWER: 0x07,
   KEY_ONE: 0x08,
   LIGHT_RESET: 0x0E,
@@ -43,16 +39,34 @@ const CMD = {
 
 const RATE_CODES = { 125: 1, 250: 2, 500: 3, 1000: 4 };
 
-const KEY_ACTIONS = [
-  "Left Click", "Right Click", "Middle Click",
-  "Backward", "Forward", "DPI Loop", "DPI +", "DPI -",
-  "Scroll Up", "Scroll Down", "Volume +", "Volume -", "Mute",
-  "Play / Pause", "Next Track", "Prev Track",
-  "Copy", "Paste", "Cut", "Undo", "Enter", "Space", "Disabled"
+/* <mouse_key> from the device XML. `value` is key_value, i.e. the index the
+   firmware expects — note 204/205 are swapped relative to visual order. */
+const KEYS = [
+  { name: 201, value: 0, side: "left" },
+  { name: 202, value: 1, side: "right" },
+  { name: 203, value: 2, side: "right" },
+  { name: 204, value: 4, side: "left" },
+  { name: 205, value: 3, side: "left" },
+  { name: 206, value: 5, side: "right", dashed: true }
 ];
 
-/* Confirmed scancodes. Mouse actions use a record type that was not decoded,
-   so only these are encodable today. */
+/* Button actions, in the vendor's own order (language/1033.lan ids 106-142,
+   160). Only the six used as defaults in the XML have a confirmed
+   func_type/func_value pair. */
+const KEY_ACTIONS = [
+  "Left-Click", "Right-Click", "Middle-Click", "Double-Click",
+  "Forward", "Backward",
+  "Scroll Up", "Scroll Down", "Scroll Left", "Scroll Right",
+  "Volume +", "Volume -", "Mute",
+  "Play/Pause", "Previous", "Next", "Stop",
+  "Macro", "System Shortcut",
+  "Screen Brightness +", "Screen Brightness -",
+  "Calculator", "My Computer", "Website", "Mail",
+  "Refresh (F5)", "Switch Application",
+  "Sensitivity", "DPI Loop", "Disable Key", "Keyboard"
+];
+
+/* Keyboard records are the only key record type decoded so far. */
 const ACTION_KEYCODE = {
   "Enter": 0x1C, "Space": 0x39, "Copy": 0x2E, "Paste": 0x2F,
   "Cut": 0x2D, "Undo": 0x2C
@@ -68,22 +82,21 @@ const DEFAULTS = {
     { value: 6400,  color: "#FE1966" },
     { value: 12000, color: "#FF4400" }
   ],
-  rate: 1000,
-  sleep: 30,
-  moveWake: true,
-  closeLight: false,
-  lod: 1,
-  sensorA: true,
-  sensorB: false,
-  keys: ["Left Click", "Right Click", "Middle Click", "Volume +", "Volume -", "DPI Loop"]
+  rate: 125,          // report_rate default_value="1"
+  sleep: 180,         // sleep_light value="180"
+  moveWake: false,    // move_wakeup value="0"
+  keys: ["Left-Click", "Right-Click", "Middle-Click", "Forward", "Backward", "DPI Loop"]
 };
+
+/* default_dpi="2" is 1-based, so the second stage is active out of the box. */
+const DEFAULT_STAGE = 1;
 
 let state = structuredClone(DEFAULTS);
 let hidDevice = null;
 let pending = null;
 let lastWriteError = "";
 let lastResult = "—";
-let selectedStage = 0;
+let selectedStage = DEFAULT_STAGE;
 let macroSteps = [];
 let recording = false;
 
@@ -111,8 +124,6 @@ function buildReport(cmd, payload, lenByte) {
 
 function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-/* One write, then wait briefly for an input report. Resolves with the reply
-   bytes or null. */
 function writeAndWait(report, timeoutMs) {
   return new Promise(async (resolve) => {
     let timer = null;
@@ -132,8 +143,9 @@ function writeAndWait(report, timeoutMs) {
   });
 }
 
-/* The vendor tool sends, waits 30 ms, retries once, then gives up. Some units
-   never acknowledge; that is reported as "sent, no ack" rather than failure. */
+/* Write, wait, retry once — mirroring DriverComm::SetDeviceData. Some units
+   accept a write without ever answering; that is reported as "sent, no ack"
+   rather than as a failure. */
 async function sendCommand(cmd, payload, lenByte, opts = {}) {
   const timeoutMs = opts.timeoutMs || 120;
   const attempts = opts.attempts || 2;
@@ -163,7 +175,7 @@ async function sendCommand(cmd, payload, lenByte, opts = {}) {
 /* -------------------------------------------------------------------- apply */
 
 async function applyRate() {
-  return sendCommand(CMD.RATE, [RATE_CODES[state.rate] || 4], 1);
+  return sendCommand(CMD.RATE, [RATE_CODES[state.rate] || 1], 1);
 }
 
 async function applyDpi() {
@@ -193,21 +205,18 @@ async function applyDpiColors() {
   return sendCommand(CMD.DPI_COLOR, payload, 0x12);
 }
 
-async function applySensor() {
-  const flags = (state.sensorA ? 8 : 0) | (state.sensorB ? 4 : 0);
-  return sendCommand(CMD.SENSOR,
-                     [state.lod, (flags & 8) ? 1 : 0, (flags & 4) ? 1 : 0], 5);
-}
-
+/* move_closelight has no UI on this model (custom show_* = 0), so it is
+   always written at the vendor default of 0. */
 async function applyPower() {
   return sendCommand(CMD.POWER,
-                     [state.sleep, 0, state.moveWake ? 1 : 0, state.closeLight ? 1 : 0], 4);
+                     [state.sleep, 0, state.moveWake ? 1 : 0, 0], 4);
 }
 
 async function applyKey(index) {
   const keyCode = ACTION_KEYCODE[state.keys[index]];
   if (keyCode === undefined) return { ok: false, error: "not encodable" };
-  return sendCommand(CMD.KEY_ONE, [index, 0x30, 0x01, 0x00, keyCode], 6);
+  return sendCommand(CMD.KEY_ONE,
+                     [KEYS[index].value, 0x30, 0x01, 0x00, keyCode], 6);
 }
 
 async function resetIndicator() {
@@ -222,23 +231,18 @@ async function applyAll() {
   if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
   setBusy(true);
   const results = [];
-  results.push(await applyRate());   await delay(40);
-  results.push(await applyDpi());    await delay(40);
+  results.push(await applyRate()); await delay(40);
+  results.push(await applyDpi()); await delay(40);
   results.push(await applyDpiColors()); await delay(40);
-  results.push(await applySensor()); await delay(40);
   results.push(await applyPower());
   setBusy(false);
   updateDiagnostics();
   saveState();
 
   const errors = results.filter((r) => !r.ok);
-  if (errors.length) {
-    showToast(errors[0].error || "Write failed");
-  } else if (results.some((r) => r.silent)) {
-    showToast("Sent — device did not acknowledge");
-  } else {
-    showToast("Configuration written");
-  }
+  if (errors.length) showToast(errors[0].error || "Write failed");
+  else if (results.some((r) => r.silent)) showToast("Sent — device did not acknowledge");
+  else showToast("Configuration written");
 }
 
 function setBusy(busy) {
@@ -302,8 +306,8 @@ async function autoConnect() {
     if (good) {
       await attach(good, false);
     } else if (ours.length) {
-      // An earlier grant bound the boot mouse/keyboard collection. Attaching to
-      // it would silently swallow every write, so ask for a fresh pairing.
+      // A previous grant bound the boot mouse/keyboard collection, where every
+      // write is silently dropped. Ask for a fresh pairing instead.
       showToast("Re-pair the mouse — the saved permission bound the wrong interface");
     }
   } catch (err) {
@@ -399,7 +403,7 @@ function switchTab(tabId) {
 }
 
 function buildKeySelects() {
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < KEYS.length; i++) {
     const select = $("btn-select-" + i);
     if (!select) continue;
     select.innerHTML = KEY_ACTIONS
@@ -435,14 +439,14 @@ function buildDpiCards() {
   });
 }
 
-/* The only LED on this mouse: the DPI indicator under the wheel. It shows the
-   colour of the stage selected for that DPI slot. */
+/* The only LED on this model: the DPI indicator under the wheel, tinted with
+   the colour of the stage it shows. */
 function updateStageLed() {
   const led = $("live-led");
   if (!led) return;
   const color = state.dpi[selectedStage].color;
   led.style.backgroundColor = color;
-  led.style.boxShadow = `0 0 4px #fff, 0 0 10px ${color}, 0 0 20px ${color}`;
+  led.style.boxShadow = `0 0 4px #fff, 0 0 10px ${color}, 0 0 22px ${color}`;
 }
 
 function syncDpiControls() {
@@ -521,20 +525,11 @@ function refreshUI() {
   document.querySelectorAll("#rate-control .seg-btn").forEach((b) => {
     b.classList.toggle("active", Number(b.dataset.rate) === state.rate);
   });
-  document.querySelectorAll("#lod-control .seg-btn").forEach((b) => {
-    b.classList.toggle("active", Number(b.dataset.lod) === state.lod);
-  });
 
   const sleep = $("sel-sleep");
   if (sleep) sleep.value = String(state.sleep);
   const wake = $("chk-wake");
   if (wake) wake.checked = state.moveWake;
-  const close = $("chk-closelight");
-  if (close) close.checked = state.closeLight;
-  const sensorA = $("chk-sensor-a");
-  if (sensorA) sensorA.checked = state.sensorA;
-  const sensorB = $("chk-sensor-b");
-  if (sensorB) sensorB.checked = state.sensorB;
 }
 
 /* ---------------------------------------------------------------- persistence */
@@ -644,7 +639,7 @@ document.addEventListener("DOMContentLoaded", () => {
     state.keys = structuredClone(DEFAULTS.keys);
     buildKeySelects();
     saveState();
-    showToast("Keys reset to defaults");
+    showToast("Keys reset to vendor defaults");
   });
 
   $("btn-reset-led")?.addEventListener("click", async () => {
@@ -657,10 +652,20 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!confirm("Restore the mouse to factory defaults?")) return;
     const res = await restoreFactory();
     state = structuredClone(DEFAULTS);
+    selectedStage = DEFAULT_STAGE;
     refreshUI();
     saveState();
     updateDiagnostics();
     showToast(res.ok ? "Factory defaults restored" : (res.error || "No response"));
+  });
+
+  $("btn-test")?.addEventListener("click", async () => {
+    if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
+    const res = await applyRate();
+    updateDiagnostics();
+    showToast(res.ok
+      ? (res.silent ? "Written — no reply from device" : "Device answered")
+      : (res.error || "Write failed"));
   });
 
   document.querySelectorAll("#rate-control .seg-btn").forEach((btn) => {
@@ -672,16 +677,6 @@ document.addEventListener("DOMContentLoaded", () => {
       updateDiagnostics();
       showToast(res.ok && !res.silent ? `${state.rate} Hz applied`
         : res.ok ? `${state.rate} Hz sent (no ack)` : (res.error || "Write failed"));
-    };
-  });
-
-  document.querySelectorAll("#lod-control .seg-btn").forEach((btn) => {
-    btn.onclick = async () => {
-      state.lod = Number(btn.dataset.lod);
-      refreshUI();
-      saveState();
-      await applySensor();
-      updateDiagnostics();
     };
   });
 
@@ -726,27 +721,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateDiagnostics();
   });
 
-  $("chk-closelight")?.addEventListener("change", async (e) => {
-    state.closeLight = e.target.checked;
-    saveState();
-    await applyPower();
-    updateDiagnostics();
-  });
-
-  $("chk-sensor-a")?.addEventListener("change", async (e) => {
-    state.sensorA = e.target.checked;
-    saveState();
-    await applySensor();
-    updateDiagnostics();
-  });
-
-  $("chk-sensor-b")?.addEventListener("change", async (e) => {
-    state.sensorB = e.target.checked;
-    saveState();
-    await applySensor();
-    updateDiagnostics();
-  });
-
   $("btn-record")?.addEventListener("click", () => {
     if (recording) stopRecording(); else startRecording();
   });
@@ -767,22 +741,13 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-apply-keys")?.addEventListener("click", async () => {
     if (!confirm("Button remap encoding is only partially recovered. Write anyway?")) return;
     let sent = 0;
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < KEYS.length; i++) {
       const res = await applyKey(i);
       if (res.ok) sent++;
       await delay(40);
     }
     updateDiagnostics();
-    showToast(`${sent} key writes sent (experimental)`);
-  });
-
-  $("btn-test")?.addEventListener("click", async () => {
-    if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
-    const res = await applyRate();
-    updateDiagnostics();
-    showToast(res.ok
-      ? (res.silent ? "Written — no reply from device" : "Device answered")
-      : (res.error || "Write failed"));
+    showToast(`${sent} of ${KEYS.length} keys written (experimental)`);
   });
 
   window.addEventListener("keydown", macroKeyHook);

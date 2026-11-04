@@ -25,12 +25,18 @@ configure it. No install, no admin rights, no background service.
 
 USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 
-- Button mapping for all six keys
+- Button mapping for all six keys, defaults taken from the vendor XML
 - Six DPI stages (50–24000) with per-stage indicator colour
 - Report rate 125 / 250 / 500 / 1000 Hz
-- Sleep timeout, move wake-up, idle light-off
-- Lift-off distance and sensor options
+- Sleep timeout and move wake-up
 - Macro recorder, named profile slots, factory restore
+
+Which features exist at all is defined by the vendor's own
+`device/mouse_tk-gm012.xml`, not by guesswork: `<menu light="0"/>` means there
+is no lighting page, and `show_lod="0" show_sensor="0" show_respondtime="0"`
+mean lift-off distance, sensor options and debounce are not configurable on this
+unit — so the studio does not offer them. The button table, `key_value` indices
+and factory defaults are transcribed from the same file.
 
 The only LED on this model is the DPI indicator under the wheel, so the studio
 has no lighting page — the API exposes the colour per DPI stage instead. The

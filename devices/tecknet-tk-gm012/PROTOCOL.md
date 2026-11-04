@@ -71,6 +71,75 @@ The checksum loop is nine unrolled iterations adding three bytes each, i.e.
 exactly bytes `5..31`, stored to `buf[0x20]`. That caps the checksummed payload
 at 27 bytes; every command below fits.
 
+## Feature set from the device descriptor
+
+`device/mouse_tk-gm012.xml` is the vendor's own description of what this unit
+exposes, and it drives both the UI flags and the defaults. Everything in the
+studio derives from it.
+
+```xml
+<menu light="0" />
+<custom show_dpitips="0" show_savetips="0" show_lod="0"
+        show_sensor="0" show_respondtime="0"/>
+```
+
+* `menu light="0"` — no lighting page, matching a mouse whose only LED is the
+  DPI indicator.
+* `show_lod="0"`, `show_sensor="0"`, `show_respondtime="0"` — the lift-off
+  distance, sensor option bits and button response time are **not** configurable
+  on this model. `0x06` is implemented in firmware but never sent by the tool,
+  so the studio does not expose it either.
+
+### Buttons
+
+| name | key_value | direction | default |
+|---|---|---|---|
+| 201 | 0 | 0 (label left) | Left-Click |
+| 202 | 1 | 1 (label right) | Right-Click |
+| 203 | 2 | 1 | Middle-Click |
+| 204 | 4 | 0 | Forward |
+| 205 | 3 | 0 | Backward |
+| 206 | 5 | 1, dashed connector | DPI Loop |
+
+`key_value` is the index written in the `0x08` payload — note that keys 204 and
+205 carry `4` and `3`, so visual order and wire order differ. `direction` and
+`rect` place the label on the device image; `dashed` gives key 206 its dashed
+connector.
+
+`func_desc` indexes `language/1033.lan`, which resolves the defaults exactly:
+
+```
+106=Left-Click   107=Right-Click  108=Middle-Click
+109=Forward      110=Backward     141=DPI Loop
+```
+
+So `func_type=1, func_value=1` is Left-Click, `3` is Right-Click, `2` is
+Middle-Click, `5` is Forward, `6` is Backward, and `func_type=5, func_value=1`
+is DPI Loop. The full action list in the language file runs 106-142 plus 160
+(`Keyboard`).
+
+### Defaults
+
+| Field | Value | Meaning |
+|---|---|---|
+| `dpi_info default_dpi` | `2` | second stage active (1600 CPI, green) |
+| `dpi_count` | `6` | six stages |
+| `report_rate default_value` | `1` | 125 Hz |
+| `report_max` | `4` | 125 / 250 / 500 / 1000 |
+| `sleep_light` | `180` | idle timeout, minutes |
+| `move_wakeup` | `0` | off |
+| `move_closelight` | `0` | not exposed in the UI |
+| `lod` | `1` | not exposed in the UI |
+| `button_respondtime` | `8` | not exposed in the UI |
+
+These are factory defaults, not live state. The GET commands were not recovered
+(see below), so the studio initialises from this table and cannot tell you what
+the mouse is currently set to.
+
+`<firmware url="..."/>` points at the vendor's Tencent COS bucket for OTA
+updates. The update path uses an authentication step (`cmd get password`) and is
+not implemented here.
+
 ## Commands
 
 | Cmd | Function | byte 4 | Payload | Confidence |
@@ -79,7 +148,7 @@ at 27 bytes; every command below fits.
 | `0x03` | DPI stages | `0x25` | 6 x 4 bytes at `[6..29]` | layout inferred |
 | `0x04` | DPI stage colors | `0x12` | 6 x RGB at `[5..22]` | verified |
 | `0x05` | Lighting | `2`/`3`/`5`/`0x18` | see below | not used by this model |
-| `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified |
+| `0x06` | Sensor / LOD | `5` | `[5]=lod`, `[6]=flag&8`, `[7]=flag&4` | verified, not exposed |
 | `0x07` | Power management | `4` | 4 bytes at `[5..8]` | partially verified |
 | `0x08` | Set one key / macro | `n*4+2` | `[5]=key`, then `n` x 4-byte records | verified |
 | `0x0E` | Reset indicator / lighting | `1` | `[5]=0x01` | verified |
@@ -157,6 +226,10 @@ off.
 `sensor_flag` is a bitfield from the tool's config store, so bits 4 and 8 are
 two independent on/off sensor options.
 
+This model sets `show_lod="0"` and `show_sensor="0"`, so the vendor tool never
+emits `0x06` for it. It is documented for sibling models in the same firmware
+family; the studio does not send it.
+
 ### Power management — `0x07`
 
 ```text
@@ -167,6 +240,9 @@ Four consecutive `_wtoi()` results from the config store. The shipped
 `mouse_tk-gm012.xml` exposes `sleep_light="180"`, `move_wakeup="0"` and
 `move_closelight="0"`, which line up with bytes 5, 7 and 8; byte 6 is
 unlabelled.
+
+Only sleep and move wake-up have UI on this model. `move_closelight` is always
+written as `0`, its vendor default.
 
 ### Keys and macros — `0x08`
 

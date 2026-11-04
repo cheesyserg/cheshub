@@ -63,20 +63,21 @@ code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px;
 
 .mouse-stage { position: relative; width: 480px; height: 480px; margin: 0 60px; }
 
-.mouse-svg { position: absolute; inset: 0; width: 300px; height: 480px; margin: 0 auto; display: block; filter: drop-shadow(0 20px 40px rgba(0,0,0,0.8)); z-index: 3; }
-.mouse-svg .shell { fill: url(#shell); stroke: rgba(255,255,255,0.10); stroke-width: 1.2; }
-.mouse-svg .gloss { fill: url(#gloss); }
-.mouse-svg .seam { stroke: rgba(0,0,0,0.55); stroke-width: 1.4; }
-.mouse-svg .wheel { fill: #0d141b; stroke: var(--riot-red); stroke-width: 1.2; }
-.mouse-svg .side-btn { fill: #202b36; stroke: rgba(255,255,255,0.08); }
-.mouse-svg .logo { fill: rgba(255,255,255,0.14); }
+.device-frame {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  height: 470px; aspect-ratio: 260 / 500; z-index: 3;
+}
+.mouse-img {
+  width: 100%; height: 100%; object-fit: contain; display: block;
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.8));
+}
 
 .stage-svg { position: absolute; inset: 0; width: 480px; height: 480px; z-index: 5; pointer-events: none; }
 .stage-svg polyline { fill: none; stroke: var(--riot-red); stroke-width: 1.2; opacity: 0.55; }
 
 .dpi-slit-led {
-  position: absolute; top: 130px; left: 233px; width: 14px; height: 5px;
-  border-radius: 3px; background-color: var(--dpi-glow); z-index: 10;
+  position: absolute; left: 46.4%; top: 30.1%; width: 3.8%; height: 7.4%;
+  border-radius: 2px; background-color: var(--dpi-glow); z-index: 10;
   border: 1px solid rgba(0, 0, 0, 0.9);
   box-shadow: 0 0 4px #ffffff, 0 0 10px var(--dpi-glow), 0 0 20px var(--dpi-glow);
   transition: background-color 0.25s ease, box-shadow 0.25s ease;
