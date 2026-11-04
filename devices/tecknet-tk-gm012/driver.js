@@ -48,7 +48,6 @@ const FILTERS = [
 const FILTERS_ALL = [{ vendorId: WIRED.vendorId }, { vendorId: WIRELESS.vendorId }];
 
 const CMD = {
-  INFO: 0x10,
   RATE: 0x02,
   DPI: 0x03,
   DPI_COLOR: 0x04,
@@ -56,7 +55,16 @@ const CMD = {
   KEY_ONE: 0x08,
   KEY_ALL: 0x09,
   LIGHT_RESET: 0x0E,
-  FACTORY: 0x0F
+  FACTORY: 0x0F,
+  /* Reads are their own command numbers, write + 0x10. Captured on launch:
+     0x10..0x17 then 0x20, all answered back-to-back. */
+  INFO: 0x10,
+  KEYS_READ: 0x11,
+  RATE_READ: 0x12,
+  DPI_READ: 0x13,
+  DPI_COLOR_READ: 0x14,
+  SENSOR_READ: 0x16,
+  POWER_READ: 0x17
 };
 
 const RATE_CODES = { 1000: 1, 500: 2, 250: 4, 125: 8 };
@@ -130,7 +138,6 @@ const KEY_RECORDS = {
 };
 
 const DEFAULTS = {
-  dpiCount: 6,
   dpi: [
     { value: 800,   color: "#FF0000" },
     { value: 1600,  color: "#00FF00" },
@@ -151,6 +158,10 @@ const DEFAULT_STAGE = 1;
 let state = structuredClone(DEFAULTS);
 let hidDevice = null;
 let deviceInfo = null;
+let batteryLevel = null;
+let charging = false;
+let linkState = null;
+let pollTimer = null;
 let pending = null;
 let lastWriteError = "";
 let lastResult = "—";
@@ -295,6 +306,102 @@ async function sendCommand(cmd, payload, lenByte, opts = {}) {
    wakes the dongle and proves the link before any write is attempted. */
 async function readDeviceInfo() {
   return sendCommand(CMD.INFO, [], 0, { isWrite: false });
+}
+
+/* Reply layout, confirmed against a live capture:
+ *   [1] status  [4..7] "L93Q" device id  [10] device type  [12] charging
+ *   [13] battery 0..100  [14] link state  [31] checksum
+ * GetMouseData stores the same three bytes into 0x88b/0x88c/0x88a. */
+function applyDeviceInfo(reply) {
+  if (!reply || reply.length < 15) return;
+  const level = reply[13];
+  batteryLevel = level >= 1 && level <= 100 ? level : null;
+  charging = reply[12] === 1;
+  linkState = reply[14];
+}
+
+async function readBattery() {
+  const info = await readDeviceInfo();
+  if (info.reply) applyDeviceInfo(info.reply);
+  updateHud();
+  updateDiagnostics();
+  return info;
+}
+
+/* The vendor tool reads its whole configuration on launch: 0x10..0x17, in that
+   order, all answered immediately. Each reply is the write layout echoed back,
+   so the same decoders used for display apply. */
+async function readRate() {
+  const res = await sendCommand(CMD.RATE_READ, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 5) return false;
+  const hz = Object.keys(RATE_CODES).find(
+    (k) => RATE_CODES[k] === res.reply[4]);
+  if (hz) state.rate = Number(hz);
+  return !!hz;
+}
+
+async function readDpi() {
+  const res = await sendCommand(CMD.DPI_READ, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 29) return false;
+  for (let i = 0; i < 6; i++) {
+    const base = 5 + i * 4;                 // [4] is the leading zero
+    const code = res.reply[base] | (res.reply[base + 1] << 8);
+    state.dpi[i].value = decodeDpi(code);
+  }
+  return true;
+}
+
+async function readDpiColors() {
+  const res = await sendCommand(CMD.DPI_COLOR_READ, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 22) return false;
+  for (let i = 0; i < 6; i++) {
+    const base = 4 + i * 3;
+    const hex = "#" + [0, 1, 2].map((k) =>
+      res.reply[base + k].toString(16).padStart(2, "0")).join("");
+    state.dpi[i].color = hex.toUpperCase();
+  }
+  return true;
+}
+
+async function readKeys() {
+  const res = await sendCommand(CMD.KEYS_READ, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 22) return false;
+  const byRecord = new Map();
+  for (const [name, record] of Object.entries(KEY_RECORDS)) {
+    byRecord.set(record.join(","), name);
+  }
+  for (let value = 0; value < 6; value++) {
+    const record = Array.from(res.reply.slice(4 + value * 3, 7 + value * 3));
+    const name = byRecord.get(record.join(","));
+    if (!name) continue;
+    const visual = KEYS.findIndex((k) => k.value === value);
+    if (visual >= 0) state.keys[visual] = name;
+  }
+  return true;
+}
+
+async function readPower() {
+  const res = await sendCommand(CMD.POWER_READ, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 8) return false;
+  const sleep = res.reply[4];
+  if (sleep > 0) state.sleep = sleep;
+  state.moveWake = res.reply[6] === 1;
+  return true;
+}
+
+/* Pull the whole configuration back off the device. */
+async function syncFromDevice() {
+  if (!hidDevice || !hidDevice.opened) return false;
+  await readBattery();
+  await readKeys();
+  await readRate();
+  await readDpi();
+  await readDpiColors();
+  await readPower();
+  refreshUI();
+  updateDiagnostics();
+  saveState();
+  return true;
 }
 
 /* -------------------------------------------------------------------- apply */
@@ -479,6 +586,11 @@ async function attach(device, announce, allowSwitch) {
     ? await readDeviceInfo()
     : { ok: false, error: "this interface has no output report" };
   deviceInfo = probe.reply || null;
+  applyDeviceInfo(deviceInfo);
+  if (deviceInfo) {
+    startPolling();
+    await syncFromDevice();      // same read sweep the vendor tool does on launch
+  }
 
   updateHud();
   updateDiagnostics();
@@ -508,6 +620,27 @@ const FILTERS_VENDOR = (() => {
   for (let page = 0xFF00; page <= 0xFFFF; page++) out.push({ usagePage: page });
   return out;
 })();
+/* Battery is read out of the 0x10 reply, so refresh it slowly — every 30 s is
+   plenty and keeps the 2.4G link from being woken constantly. */
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(() => {
+    if (!hidDevice || !hidDevice.opened) {
+      stopPolling();
+      return;
+    }
+    if (pending) return;      // a command is already waiting for its reply
+    readBattery();
+  }, 30000);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
 function isVendorCollection(device) {
   return (device.collections || []).some(
     (c) => c.usagePage === VENDOR_PAGE && c.usage === VENDOR_USAGE) ||
@@ -600,8 +733,18 @@ function updateHud() {
     if (!online || !hidDevice) mode.textContent = "NONE";
     else mode.textContent = hidDevice.vendorId === WIRELESS.vendorId ? "2.4G WIRELESS" : "USB WIRED";
   }
-  const bat = $("hud-battery-text");
-  if (bat) bat.textContent = online ? "N/A" : "--%";
+
+  const text = $("hud-battery-text");
+  const bar = $("hud-battery-bar");
+  const pct = online ? batteryLevel : null;
+  if (text) {
+    if (pct === null) text.textContent = online ? "—" : "--%";
+    else text.textContent = `${pct}%${charging ? " ⚡" : ""}`;
+  }
+  if (bar) {
+    bar.style.width = pct === null ? "0%" : `${pct}%`;
+    bar.style.background = pct !== null && pct <= 20 ? "#ff4655" : "";
+  }
 }
 
 function updateDiagnostics() {
@@ -618,6 +761,7 @@ function updateDiagnostics() {
     set("diag-ids", "—");
     set("diag-interface", "—");
     set("diag-info", "—");
+    set("diag-battery", "—");
     set("diag-last", lastResult);
     set("diag-error", lastWriteError || "—");
     const list = $("diag-collections");
@@ -634,6 +778,11 @@ function updateDiagnostics() {
       vendor ? "ok" : "bad");
   set("diag-info", deviceInfo ? `${deviceInfo.length} B [${hexOf(deviceInfo, 16)}]` : "no reply",
       deviceInfo ? "ok" : "bad");
+  set("diag-battery",
+      `${batteryLevel === null ? "—" : batteryLevel + "%"}`
+      + `${charging ? " charging" : ""}`
+      + `${linkState === null ? "" : " · link " + linkState}`,
+      batteryLevel === null ? "" : "ok");
   set("diag-last", lastResult);
   set("diag-error", lastWriteError || "—", lastWriteError ? "bad" : "");
 
@@ -730,8 +879,6 @@ function syncDpiControls() {
   if (badge) badge.textContent = state.dpi[selectedStage].value;
   const color = $("inp-dpi-color");
   if (color) color.value = state.dpi[selectedStage].color;
-  const count = $("sel-dpi-count");
-  if (count) count.value = state.dpiCount;
 }
 
 function buildMacroList() {
@@ -892,6 +1039,10 @@ document.addEventListener("DOMContentLoaded", () => {
   navigator.hid?.addEventListener("connect", autoConnect);
   navigator.hid?.addEventListener("disconnect", () => {
     hidDevice = null;
+    deviceInfo = null;
+    batteryLevel = null;
+    charging = false;
+    stopPolling();
     updateHud();
     updateDiagnostics();
     showToast("Device disconnected");
@@ -925,10 +1076,9 @@ document.addEventListener("DOMContentLoaded", () => {
     requestPairWith([filter], "custom");
   });
 
-  $("btn-sync")?.addEventListener("click", () => {
-    refreshUI();
-    updateDiagnostics();
-    showToast("Loaded saved profile");
+  $("btn-sync")?.addEventListener("click", async () => {
+    const ok = await syncFromDevice();
+    showToast(ok ? "Synced from device" : "Connect the mouse first");
   });
 
   $("btn-reset-keys")?.addEventListener("click", () => {
@@ -1021,11 +1171,6 @@ document.addEventListener("DOMContentLoaded", () => {
     saveState();
     await applyDpiColors();
     updateDiagnostics();
-  });
-
-  $("sel-dpi-count")?.addEventListener("change", (e) => {
-    state.dpiCount = Number(e.target.value);
-    saveState();
   });
 
   $("sel-sleep")?.addEventListener("change", async (e) => {

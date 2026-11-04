@@ -428,12 +428,44 @@ the simple bindings use `0x09` above.
 
 ## Read path
 
-`GetMouseData` / `GetMouseData2` contain the strings `cmd get password`,
-`cmd get all key`, `cmd get reportrate`, `cmd get dpi value`,
-`cmd get dpi color`, `cmd get led mode`, `cmd get Sensor advanced par` and
-`cmd get power_management`. The GET command bytes were not recovered — they are
-built through a different helper than `SetDeviceData`, so this page does not
-read state back. Settings live in the browser profile and are only written.
+The tool reads its whole configuration on launch, in one burst:
+
+```text
+22:03:30  10 …   11 …   12 …   13 …   14 …   15 …   16 …   17 …   20 …
+```
+
+**Reads are their own command numbers — write + `0x10`** — not write commands
+with the direction bit flipped. The direction byte `[3]` is `0x00` on all of
+them, but the command is what selects a read:
+
+| Read | Write | Payload | Contents |
+|---|---|---|---|
+| `0x10` | — | 32 B | device info: `[13]` battery, `[12]` charging, `[14]` link, `[10]` type |
+| `0x11` | `0x09` | 18 B | six 3-byte key records, `key_value` order |
+| `0x12` | `0x02` | 1 B | report rate code at `[4]` |
+| `0x13` | `0x03` | 25 B | six 4-byte DPI codes at `[5]`, `[9]`, … |
+| `0x14` | `0x04` | 18 B | six RGB triples at `[4]` |
+| `0x15` | `0x05` | 24 B | lighting (unused on this model) |
+| `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |
+| `0x17` | `0x07` | 5 B | `[sleep][0][wake][closelight][0]` |
+| `0x20` | — | 2 B | undecoded, returns `26 03` |
+
+Two of these confirm earlier guesses. `0x17` returns `1e 00 01 00 00` —
+sleep 30, wake on, closelight off — matching the 4-byte write of `0x07`. And
+`0x13` decodes through the same table as the write path:
+
+```text
+13 00 01 19  00 | 16 00 16 00 | cc 00 cc 00 | 30 00 30 00 | 40 00 40 00 | 80 00 80 00 | dc 00 dc 00 | 00 00
+                1100           10400         2400          3200          6400          12000
+```
+
+`0x11` also pins the button-bit mapping: the default bindings come back as
+`10 01 00 / 10 02 00 / 10 04 00 / 10 08 00 / 10 10 00 / 40 01 00`, i.e. left,
+right, middle, back, forward, DPI loop — and record 3 is Backward / record 4 is
+Forward, exactly as `key_value` dictates.
+
+The studio runs this same sweep on connect and on **SYNC**, so the UI reflects
+the mouse rather than the stored profile.
 
 `cmd get password` hints at an auth step in `FirmUpgradeOTAStart` /
 `FirmUpgradeOTASendData`; firmware OTA is out of scope here.

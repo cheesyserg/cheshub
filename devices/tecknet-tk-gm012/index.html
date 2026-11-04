@@ -149,17 +149,6 @@
               <div class="section-title font-impact">DPI SENSITIVITY</div>
               <div class="section-desc">Six stages, 50 to 24000 CPI. The active stage lights up on the mouse.</div>
 
-              <div class="dpi-toolbar">
-                <label class="inline-label" for="sel-dpi-count">DPI COUNT</label>
-                <select id="sel-dpi-count" class="select-compact">
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                  <option value="6" selected>6</option>
-                </select>
-              </div>
-
               <div class="dpi-grid" id="dpi-grid"></div>
 
               <div class="slider-wrap dpi-slider">
@@ -167,6 +156,12 @@
                 <span class="val-badge" id="lbl-dpi">800</span>
                 <input type="color" id="inp-dpi-color" class="color-chip" value="#00ff00">
               </div>
+
+              <p class="section-note" id="dpi-encode-note">
+                The mouse stores a compressed code, not the displayed value
+                (<code>dpi/50</code> up to 10000, then 100-step, then 1000-step above
+                13000). Values near a boundary round to what the hardware can hold.
+              </p>
 
               <div class="section-actions">
                 <button class="btn-ghost font-impact" id="btn-reset-led" type="button">RESET INDICATOR LED</button>
@@ -291,6 +286,7 @@
                 <div class="diag-cell"><span class="diag-label">VID : PID</span><span id="diag-ids">—</span></div>
                 <div class="diag-cell"><span class="diag-label">INTERFACE</span><span id="diag-interface">—</span></div>
                 <div class="diag-cell"><span class="diag-label">INFO REPLY (0x10)</span><span id="diag-info">—</span></div>
+                <div class="diag-cell"><span class="diag-label">BATTERY / LINK</span><span id="diag-battery">—</span></div>
                 <div class="diag-cell"><span class="diag-label">LAST COMMAND</span><span id="diag-last">—</span></div>
                 <div class="diag-cell"><span class="diag-label">LAST ERROR</span><span id="diag-error">—</span></div>
               </div>
