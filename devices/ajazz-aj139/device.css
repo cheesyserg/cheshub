@@ -1,0 +1,154 @@
+/* AJAZZ AJ139 V2 MC — device-specific layout and lighting preview */
+
+/* --------------------------------------------------------------- visualiser */
+
+.mouse-stage {
+  position: relative;
+  width: 460px;
+  height: 460px;
+  margin: 0 80px;
+  flex: none;
+}
+
+.mouse-img {
+  position: absolute;
+  inset: 0;
+  width: 460px;
+  height: 460px;
+  object-fit: contain;
+  z-index: 3;
+  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.45));
+}
+
+.dpi-slit-led {
+  position: absolute;
+  top: 60px;
+  left: 221.5px;
+  width: 14px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: var(--dpi-glow, var(--accent));
+  z-index: 10;
+  border: 1px solid rgba(0, 0, 0, 0.9);
+  box-shadow: 0 0 6px var(--dpi-glow, var(--accent));
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Side diffusers preview the real lighting effect. */
+.side-diffuser {
+  position: absolute;
+  top: 102px;
+  width: 28px;
+  height: 185px;
+  border-radius: 24px;
+  z-index: 2;
+  pointer-events: none;
+  filter: blur(12px);
+  opacity: 0.95;
+  transition: opacity 0.3s;
+  transform-origin: top center;
+}
+.side-diffuser.left { left: 124px; transform: rotate(2deg); }
+.side-diffuser.right { right: 124px; transform: rotate(-2deg); }
+
+.glow-wave { background: linear-gradient(180deg, #ff0044, #cc00ff, #0055ff, #00ff55, #ffaa00, #ff0044); background-size: 100% 300%; animation: animWaveRev 6.5s linear infinite; }
+@keyframes animWaveRev { 0% { background-position: 0% 300%; } 100% { background-position: 0% 0%; } }
+
+.glow-neon { background: #ff0033; animation: animNeonCycle 6.5s linear infinite; }
+@keyframes animNeonCycle { 0% { background-color: #ff0033; filter: blur(12px) drop-shadow(0 0 14px #ff0033); } 17% { background-color: #ff7700; filter: blur(12px) drop-shadow(0 0 14px #ff7700); } 33% { background-color: #ffee00; filter: blur(12px) drop-shadow(0 0 14px #ffee00); } 50% { background-color: #00ff55; filter: blur(12px) drop-shadow(0 0 14px #00ff55); } 67% { background-color: #0088ff; filter: blur(12px) drop-shadow(0 0 14px #0088ff); } 83% { background-color: #ee00ff; filter: blur(12px) drop-shadow(0 0 14px #ee00ff); } 100% { background-color: #ff0033; filter: blur(12px) drop-shadow(0 0 14px #ff0033); } }
+
+.glow-chaser { background: repeating-linear-gradient(180deg, #ff0044 0px, #ff0044 14px, transparent 14px, transparent 24px, #00ff55 24px, #00ff55 38px, transparent 38px, transparent 48px, #ffee00 48px, #ffee00 62px, transparent 62px, transparent 72px, #00f0ff 72px, #00f0ff 86px, transparent 86px, transparent 96px); background-size: 100% 200%; animation: animChaserBounceFast 2.2s ease-in-out infinite, animChaserHueFast 0.5s linear infinite; }
+@keyframes animChaserBounceFast { 0% { background-position: 0% 0%; } 50% { background-position: 0% 100%; } 100% { background-position: 0% 0%; } }
+@keyframes animChaserHueFast { 0% { filter: blur(11px) hue-rotate(0deg); } 100% { filter: blur(11px) hue-rotate(360deg); } }
+
+.glow-yoyo { background: linear-gradient(180deg, #00f0ff 0%, #00f0ff 80%, transparent 100%); background-size: 100% 200%; animation: animYoYoWipeFast 0.65s linear infinite, animYoYoHueFast 2.6s steps(4) infinite; }
+@keyframes animYoYoWipeFast { 0% { background-position: 0% 100%; opacity: 0.2; } 20% { opacity: 1; } 100% { background-position: 0% -100%; opacity: 0.95; } }
+@keyframes animYoYoHueFast { 0% { filter: blur(12px) hue-rotate(0deg); } 25% { filter: blur(12px) hue-rotate(90deg); } 50% { filter: blur(12px) hue-rotate(180deg); } 75% { filter: blur(12px) hue-rotate(270deg); } 100% { filter: blur(12px) hue-rotate(360deg); } }
+
+.glow-flow {
+  background: #ff0044;
+  transform-origin: top center;
+  animation: animFlowScale 0.95s cubic-bezier(0.2, 0.9, 0.3, 1) infinite, animFlowHueCycle 3.8s steps(4) infinite;
+}
+@keyframes animFlowScale {
+  0% { transform: scaleY(0); opacity: 0; }
+  12% { transform: scaleY(0.25); opacity: 1; }
+  28% { transform: scaleY(0.5); opacity: 1; }
+  48% { transform: scaleY(0.75); opacity: 1; }
+  68% { transform: scaleY(1); opacity: 1; }
+  88% { transform: scaleY(1); opacity: 1; }
+  98% { transform: scaleY(1); opacity: 0; }
+  100% { transform: scaleY(0); opacity: 0; }
+}
+@keyframes animFlowHueCycle { 0% { filter: blur(12px) hue-rotate(0deg); } 25% { filter: blur(12px) hue-rotate(90deg); } 50% { filter: blur(12px) hue-rotate(180deg); } 75% { filter: blur(12px) hue-rotate(270deg); } 100% { filter: blur(12px) hue-rotate(360deg); } }
+
+.glow-breathing { animation: animColorBreathingSuperSlow 28s ease-in-out infinite; }
+@keyframes animColorBreathingSuperSlow { 0%, 20%, 40%, 60%, 80%, 100% { opacity: 0.05; filter: blur(4px); } 10% { opacity: 0.95; background-color: #ff0044; filter: blur(14px) drop-shadow(0 0 18px #ff0044); } 30% { opacity: 0.95; background-color: #00f0ff; filter: blur(14px) drop-shadow(0 0 18px #00f0ff); } 50% { opacity: 0.95; background-color: #ffee00; filter: blur(14px) drop-shadow(0 0 18px #ffee00); } 70% { opacity: 0.95; background-color: #00ff55; filter: blur(14px) drop-shadow(0 0 18px #00ff55); } 90% { opacity: 0.95; background-color: #ee00ff; filter: blur(14px) drop-shadow(0 0 18px #ee00ff); } }
+
+.glow-off { display: none !important; }
+
+#anchor-0 { top: 75px; left: -65px; }
+#anchor-1 { top: 75px; right: -65px; }
+#anchor-2 { top: 140px; right: -75px; }
+#anchor-3 { top: 235px; left: -75px; }
+#anchor-4 { top: 165px; left: -75px; }
+#anchor-5 { top: 205px; right: -75px; }
+
+/* ------------------------------------------------------------------ cards */
+
+.rgb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.rgb-card {
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+.rgb-card:hover { background: var(--surface-3); border-color: var(--border-strong); }
+.rgb-card.active { border-color: var(--accent); background: rgba(47, 159, 221, 0.07); }
+
+.rgb-preview { height: 5px; width: 100%; border-radius: 2px; }
+.rgb-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.rgb-desc { font-size: 11px; color: var(--text-muted); }
+
+/* -------------------------------------------------------------- DPI stages */
+
+.dpi-stage-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 150px;
+  cursor: pointer;
+}
+
+.dpi-stage-dot {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.dpi-stage-name { font-size: 13px; font-weight: 600; color: var(--text); }
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 860px) {
+  .mouse-stage { margin: 0 auto; transform: scale(0.82); transform-origin: top center; margin-bottom: -86px; }
+  .rgb-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 620px) {
+  .mouse-stage { transform: scale(0.64); margin-bottom: -172px; }
+  .rgb-grid { grid-template-columns: 1fr; }
+  .dpi-stage-pick { width: 120px; }
+}

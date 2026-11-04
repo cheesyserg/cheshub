@@ -2,7 +2,7 @@
  *
  * Feature set and defaults come from the vendor's device descriptor,
  * device/mouse_tk-gm012.xml, and the action labels from language/1033.lan.
- * Wire protocol: see PROTOCOL.md.
+ * Wire protocol: see docs/PROTOCOL.md.
  *
  * Frame (verified):
  *   [0] report id 0x00   [1] command   [2] 0x00   [3] 0x01
@@ -229,16 +229,7 @@ const DEFAULTS = {
 /* default_dpi="2" is 1-based, so the second stage is active out of the box. */
 const DEFAULT_STAGE = 1;
 
-/* Registry id for this studio, and the icons used by the shared device list. */
-const DEVICE_ID = "tecknet-tk-gm012";
-
-const DEVICE_ICONS = {
-  mouse: '<rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/>',
-  headset: '<path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="2" y="13" width="4" height="7" rx="2"/><rect x="18" y="13" width="4" height="7" rx="2"/>'
-};
-
 let state = structuredClone(DEFAULTS);
-let wallpaper = { image: "", motion: true };
 let hidDevice = null;
 let deviceInfo = null;
 let batteryLevel = null;
@@ -924,25 +915,7 @@ function updateHud() {
     bar.style.background = pct !== null && pct <= 20 ? "#e05561" : "";
   }
 
-  updateLock();
-}
-
-/* The configuration panels stay locked until the vendor collection answers.
-   Diagnostics and Appearance stay available so pairing and wallpapers can be
-   changed while offline. */
-function updateLock() {
-  const online = !!(hidDevice && hidDevice.opened);
-  const unlockedTab = ["tab-diagnostics", "tab-appearance"].some((id) => {
-    const panel = $(id);
-    return panel && panel.classList.contains("active");
-  });
-  const overlay = $("lock-overlay");
-  const showLock = !online && !unlockedTab;
-  if (overlay) overlay.hidden = !showLock;
-  const connect = $("btn-connect");
-  if (connect) connect.hidden = showLock;
-  const sync = $("btn-sync");
-  if (sync) sync.disabled = !online;
+  window.ChesHub?.setConnected(online);
 }
 
 function updateDiagnostics() {
@@ -1011,17 +984,6 @@ function showToast(message) {
   toast.textContent = message;
   container.appendChild(toast);
   setTimeout(() => toast.remove(), 2800);
-}
-
-function switchTab(tabId) {
-  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
-  const target = $(tabId);
-  if (target) target.classList.add("active");
-  document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
-  const nav = $("nav-" + tabId);
-  if (nav) nav.classList.add("active");
-  saveState();
-  updateLock();
 }
 
 function buildKeySelects() {
@@ -1151,17 +1113,6 @@ function buildMacroList() {
   });
 }
 
-function buildDeviceList() {
-  const list = $("device-list");
-  const devices = window.CHESHUB_DEVICES || [];
-  if (!list || !devices.length) return;
-  list.innerHTML = devices.map((device) => `
-    <a class="nav-item${device.id === DEVICE_ID ? " active" : ""}" href="../../${device.path}">
-      <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">${DEVICE_ICONS[device.kind] || DEVICE_ICONS.mouse}</svg>
-      <span>${device.short || device.name}</span>
-    </a>`).join("");
-}
-
 function buildProfiles() {
   const list = $("profile-list");
   if (!list) return;
@@ -1217,7 +1168,6 @@ function refreshUI() {
   updateStageLed();
   buildMacroList();
   buildProfiles();
-  buildDeviceList();
 
   const macroKey = $("sel-macro-key");
   if (macroKey) {
@@ -1254,8 +1204,6 @@ function refreshUI() {
   }
   const wake = $("chk-wake");
   if (wake) wake.checked = state.moveWake;
-
-  applyAppearance();
 }
 
 /* ---------------------------------------------------------------- persistence */
@@ -1264,82 +1212,6 @@ function saveState() {
   try {
     localStorage.setItem("tk-gm012.state", JSON.stringify(state));
   } catch (err) { /* storage disabled */ }
-}
-
-function loadWallpaper() {
-  try {
-    const raw = JSON.parse(localStorage.getItem("cheshub.wallpaper") || "null");
-    if (raw && typeof raw.image === "string") wallpaper.image = raw.image;
-    if (raw && typeof raw.motion === "boolean") wallpaper.motion = raw.motion;
-  } catch (err) { /* ignore */ }
-}
-
-function saveWallpaper() {
-  try {
-    localStorage.setItem("cheshub.wallpaper", JSON.stringify(wallpaper));
-  } catch (err) {
-    showToast("Wallpaper is too large to store");
-  }
-}
-
-function applyAppearance() {
-  const hasImage = !!wallpaper.image;
-  document.body.classList.toggle("wp-image", hasImage);
-  document.body.classList.toggle("wp-static", !wallpaper.motion);
-
-  const layer = $("wallpaper");
-  if (layer) layer.style.backgroundImage = hasImage ? `url("${wallpaper.image}")` : "";
-
-  const motion = $("chk-motion");
-  if (motion) motion.checked = wallpaper.motion;
-
-  const clear = $("btn-wallpaper-clear");
-  if (clear) clear.disabled = !hasImage;
-
-  const choose = $("btn-wallpaper-file");
-  if (choose) choose.textContent = hasImage ? "Replace Image" : "Choose Image";
-
-  const status = $("wallpaper-status");
-  if (status) {
-    status.textContent = hasImage
-      ? "Custom image in use. It stays in this browser."
-      : "Using the animated backdrop.";
-  }
-}
-
-function readWallpaperFile(file) {
-  if (!file) return;
-  if (!/^image\//.test(file.type)) return showToast("Choose an image file");
-  if (file.size > 15 * 1024 * 1024) return showToast("Image is larger than 15 MB");
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    const img = new Image();
-    img.onload = () => {
-      const max = 1920;
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const width = Math.max(1, Math.round(img.width * scale));
-      const height = Math.max(1, Math.round(img.height * scale));
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return showToast("Could not process that image");
-      ctx.drawImage(img, 0, 0, width, height);
-      try {
-        wallpaper.image = canvas.toDataURL("image/jpeg", 0.82);
-      } catch (err) {
-        return showToast("Could not process that image");
-      }
-      applyAppearance();
-      saveWallpaper();
-      showToast("Wallpaper updated");
-    };
-    img.onerror = () => showToast("Could not decode that image");
-    img.src = String(reader.result);
-  };
-  reader.onerror = () => showToast("Could not read that file");
-  reader.readAsDataURL(file);
 }
 
 function saveMacro() {
@@ -1599,12 +1471,13 @@ function macroKeyHook(event) {
 
 document.addEventListener("DOMContentLoaded", () => {
   restoreState();
-  loadWallpaper();
   loadMacro();
   refreshUI();
   updateHud();
   updateDiagnostics();
   autoConnect();
+
+  document.addEventListener("cheshub:tabchange", saveState);
 
   navigator.hid?.addEventListener("connect", autoConnect);
   navigator.hid?.addEventListener("disconnect", () => {
@@ -1651,24 +1524,6 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-sync")?.addEventListener("click", async () => {
     const ok = await syncFromDevice();
     showToast(ok ? "Synced from device" : "Connect the mouse first");
-  });
-
-  $("chk-motion")?.addEventListener("change", (e) => {
-    wallpaper.motion = e.target.checked;
-    applyAppearance();
-    saveWallpaper();
-  });
-  $("btn-wallpaper-file")?.addEventListener("click", () => $("inp-wallpaper-file")?.click());
-  $("inp-wallpaper-file")?.addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    readWallpaperFile(file);
-  });
-  $("btn-wallpaper-clear")?.addEventListener("click", () => {
-    wallpaper.image = "";
-    applyAppearance();
-    saveWallpaper();
-    showToast("Wallpaper removed");
   });
 
   $("btn-read-keys")?.addEventListener("click", async () => {

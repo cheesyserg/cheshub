@@ -544,18 +544,18 @@ the mouse rather than the stored profile.
 
 ## Probing the hardware
 
-`tools/hid_probe.py` talks to the device through `hidapi` — the same library
+`../tools/hid_probe.py` talks to the device through `hidapi` — the same library
 the vendor tool uses — so it bypasses WebHID, Chromium and the browser picker
 entirely. It is the fastest way to tell "the device is not answering" apart
 from "the browser cannot send this".
 
 ```bash
 pip install hidapi
-python tools/hid_probe.py              # list the four interfaces
-python tools/hid_probe.py --probe      # 0x10 read, then 0x02 write, on the vendor collection
-python tools/hid_probe.py --probe --all  # try every interface
-python tools/hid_probe.py --listen 10    # dump input reports for 10 s
-python tools/hid_probe.py --send "02 00 01 01 04"   # inject one frame
+python ../tools/hid_probe.py              # list the four interfaces
+python ../tools/hid_probe.py --probe      # 0x10 read, then 0x02 write, on the vendor collection
+python ../tools/hid_probe.py --probe --all  # try every interface
+python ../tools/hid_probe.py --listen 10    # dump input reports for 10 s
+python ../tools/hid_probe.py --send "02 00 01 01 04"   # inject one frame
 ```
 
 `hid_write` pads short buffers up to the report length, so the script always

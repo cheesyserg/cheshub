@@ -47,19 +47,17 @@ const toast = (msg) => {
 };
 
 const setHud = (status, battery, mode) => {
-  const dot = document.getElementById("hud-dot");
-  const lbl = document.getElementById("hud-status");
   const bat = document.getElementById("hud-battery-text");
   const bar = document.getElementById("hud-battery-bar");
   const md = document.getElementById("hud-mode");
 
-  if (status) {
-    const online = status === "ONLINE";
-    if (online) { dot.className = "status-dot active"; lbl.innerText = "ONLINE"; lbl.style.color = "#00ff55"; }
-    else { dot.className = "status-dot"; lbl.innerText = status; lbl.style.color = ""; }
+  if (status && window.ChesHub) window.ChesHub.setConnected(status === "ONLINE");
+
+  if (battery !== undefined && battery !== null) {
+    if (bat) bat.innerText = `${battery}%`;
+    if (bar) bar.style.width = `${Math.min(100, Math.max(0, battery))}%`;
   }
-  if (battery !== undefined && battery !== null) { bat.innerText = `${battery}%`; bar.style.width = `${battery}%`; }
-  if (mode) { md.innerText = mode; }
+  if (mode && md) md.innerText = mode;
 };
 
 const setStatus = (msg) => {
@@ -495,6 +493,10 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Connect/Disconnect button
   const connectBtn = document.getElementById("btn-connect");
   if (connectBtn) connectBtn.onclick = connectOrApply;
+
+  // Lock screen CTA
+  const lockBtn = document.getElementById("btn-lock-connect");
+  if (lockBtn) lockBtn.onclick = connectOrApply;
 
   // Sync button
   const syncBtn = document.getElementById("btn-sync");

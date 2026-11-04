@@ -51,10 +51,11 @@ keyboard and consumer-control collections either have no output report or never
 answer, so the studio filters on that exact collection.
 
 The wire protocol was reverse-engineered from the vendor tool and is documented
-in [`devices/tecknet-tk-gm012/PROTOCOL.md`](devices/tecknet-tk-gm012/PROTOCOL.md),
+in
+[`devices/tecknet-tk-gm012/docs/PROTOCOL.md`](devices/tecknet-tk-gm012/docs/PROTOCOL.md),
 with every field marked verified or inferred. A compact register-by-register
 map is in
-[`devices/tecknet-tk-gm012/REGISTERS.md`](devices/tecknet-tk-gm012/REGISTERS.md).
+[`devices/tecknet-tk-gm012/docs/REGISTERS.md`](devices/tecknet-tk-gm012/docs/REGISTERS.md).
 
 ### AJAZZ AJ139 V2 MC
 
@@ -99,32 +100,40 @@ backend, account, or telemetry.
 
 - Device settings are written straight to the hardware.
 - Named profiles are kept in `localStorage`, scoped to the origin.
-- Each device folder is self-contained: HTML, CSS, and one `driver.js` holding
-  both the protocol constants and the UI wiring.
+- Shared shell, tokens and backdrop live in `assets/`; each device folder adds
+  only its own layout and `driver.js` protocol code.
 
 ## Project layout
 
 ```
-index.html                      hub page + device registry UI
-css/hub.css                     hub styling
-js/devices.js                   shared device registry (hub + studio sidebars)
+index.html                      hub page
+assets/
+  css/
+    base.css                    design tokens, backdrop, buttons, form controls
+    studio.css                  shared studio shell (sidebar, header, panels, lock)
+    hub.css                     hub-only layout
+  js/
+    devices.js                  shared device registry
+    theme.js                    wallpaper preferences (shared by hub + studios)
+    studio.js                   device switcher, tabs and connection lock
+    hub.js                      hub card grid and pairing controls
 devices/
   <slug>/
     index.html                  device studio
     driver.js                   transport + protocol + UI
-    style.css                   device styling
-    PROTOCOL.md                 wire-protocol notes (where recovered)
-    REGISTERS.md                compact register-by-register map
+    device.css                  device-specific layout
+    images/                     product renders
+    docs/                       PROTOCOL.md, REGISTERS.md
 .github/workflows/static.yml    deploy to GitHub Pages on push to main
 ```
 
 ## Adding a device
 
-1. Create `devices/<vendor>-<model>/` with `index.html`, `style.css`, and
-   `driver.js`. Copy an existing studio as a starting point, and set its
-   `DEVICE_ID` constant to the registry `id` you add below.
-2. Register it in `CHESHUB_DEVICES` in `js/devices.js`. That one array feeds
-   the hub grid and the device list in every studio sidebar:
+1. Create `devices/<vendor>-<model>/` with `index.html`, `device.css`, and
+   `driver.js`. Copy an existing studio as a starting point, then set
+   `data-device="<registry id>"` on its `<body>`.
+2. Register it in `CHESHUB_DEVICES` in `assets/js/devices.js`. That one array
+   feeds the hub grid and the device list in every studio sidebar:
 
 ```js
 {
@@ -144,8 +153,8 @@ devices/
 be valid HID filters. `vendorId` + `productId` alone also works if the vendor
 usage page is unknown. `namePrefix` filters are used for serial devices.
 
-3. Keep device-specific protocol notes in that folder's `PROTOCOL.md`, and mark
-   anything not confirmed against hardware as inferred.
+3. Keep device-specific protocol notes in that folder's `docs/PROTOCOL.md`, and
+   mark anything not confirmed against hardware as inferred.
 
 ## Development
 
@@ -207,7 +216,7 @@ Expected — the HID APIs require `https://` or `localhost`.
 ## Contributing
 
 New device folders and protocol corrections are welcome. If you verify a field
-against real hardware, update that device's `PROTOCOL.md` and drop the
+against real hardware, update that device's `docs/PROTOCOL.md` and drop the
 "inferred" marker. Please don't commit vendor binaries; link to the vendor
 download instead.
 

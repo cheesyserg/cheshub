@@ -95,39 +95,29 @@ function setLOD(lod) {
 }
 
 function updateTelemetryHUD(connected, batteryPct = null, charging = false, mode = "NONE") {
-  const dot = document.getElementById("hud-dot");
-  const statusText = document.getElementById("hud-status");
   const batText = document.getElementById("hud-battery-text");
   const batBar = document.getElementById("hud-battery-bar");
   const modeText = document.getElementById("hud-mode");
 
-  if (!dot) return;
+  if (window.ChesHub) window.ChesHub.setConnected(connected);
 
-  if (connected) {
-    dot.className = "status-dot active";
-    statusText.innerText = "ONLINE";
-    statusText.style.color = "#00ff55";
-    modeText.innerText = mode.toUpperCase();
-    modeText.style.color = "#fff";
-
-    if (batteryPct !== null) {
-      batText.innerText = `${batteryPct}% ${charging ? "⚡" : ""}`;
-      batBar.style.width = `${Math.min(100, Math.max(0, batteryPct))}%`;
-      batBar.style.background = batteryPct > 20 ? "#00ff55" : "#ff4655";
-    }
-  } else {
-    dot.className = "status-dot";
-    statusText.innerText = "STANDBY";
-    statusText.style.color = "var(--riot-gray)";
-    batText.innerText = "--%";
-    batBar.style.width = "0%";
-    modeText.innerText = "NONE";
-    modeText.style.color = "var(--riot-gray)";
+  if (batText) {
+    batText.innerText = !connected
+      ? "--%"
+      : (batteryPct === null ? "n/a" : `${batteryPct}%${charging ? " ⚡" : ""}`);
+    batText.style.color = connected && batteryPct !== null && batteryPct <= 20 ? "#e05561" : "";
   }
+  if (batBar) {
+    batBar.style.width = connected && batteryPct !== null
+      ? `${Math.min(100, Math.max(0, batteryPct))}%` : "0%";
+    batBar.style.background = connected && batteryPct !== null && batteryPct <= 20 ? "#e05561" : "";
+  }
+  if (modeText) modeText.innerText = connected ? mode : "None";
 }
 
 function initUI() {
-  setShellColor(localStorage.getItem("cheshub_mouse_shell") || "black.png");
+  const stored = localStorage.getItem("cheshub_mouse_shell") || "images/black.png";
+  setShellColor(stored.includes("/") ? stored : "images/" + stored);
 
   const grid = document.getElementById("lighting-grid");
   if (grid) {
@@ -152,10 +142,10 @@ function initUI() {
       const col = DPI_STAGE_COLORS[i];
       dpiContainer.innerHTML += `
         <div class="form-row">
-          <label style="display:flex; align-items:center; gap:10px; cursor:pointer; width:130px;">
+          <label class="dpi-stage-pick">
             <input type="radio" name="dpi_active" class="stage-radio" ${i === activeDpiIndex ? "checked" : ""} onchange="activeDpiIndex = ${i}; updateDpiLedGlow(${i}); writeFullConfig();">
-            <span style="display:inline-block; width:14px; height:14px; border-radius:50%; background:${col.hex}; box-shadow:0 0 8px ${col.hex};"></span>
-            <span style="font-size:14px; font-weight:700;">Stage ${i + 1}</span>
+            <span class="dpi-stage-dot" style="background:${col.hex}"></span>
+            <span class="dpi-stage-name">Stage ${i + 1}</span>
           </label>
           <div class="slider-wrap">
             <input type="range" id="dpi-rng-${i}" min="50" max="12000" step="50" value="${currentDpis[i]}"
@@ -484,6 +474,13 @@ const debouncedWrite = debounce(() => {
 window.addEventListener("DOMContentLoaded", async () => {
   initUI();
   await tryAutoConnect();
+
+  const connectBtn = document.getElementById("btn-connect");
+  if (connectBtn) connectBtn.onclick = connectOrApply;
+  const syncBtn = document.getElementById("btn-sync");
+  if (syncBtn) syncBtn.onclick = syncHardwareState;
+  const lockBtn = document.getElementById("btn-lock-connect");
+  if (lockBtn) lockBtn.onclick = connectOrApply;
 
   document.querySelectorAll("select, .toggle input").forEach(el => {
     el.addEventListener("change", () => {

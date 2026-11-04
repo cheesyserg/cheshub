@@ -6,9 +6,11 @@
   <meta name="theme-color" content="#101012">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232f9fdd'/%3E%3Ctext x='16' y='23' font-family='Segoe UI,Arial' font-size='19' font-weight='700' text-anchor='middle' fill='%230d1114'%3EC%3C/text%3E%3C/svg%3E">
   <title>ChesHub | TECKNET TK-GM012 Studio</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="../../assets/css/base.css">
+  <link rel="stylesheet" href="../../assets/css/studio.css">
+  <link rel="stylesheet" href="device.css">
 </head>
-<body>
+<body data-device="tecknet-tk-gm012">
 
   <div class="ambient" id="ambient" aria-hidden="true">
     <span class="ambient-blob blob-a"></span>
@@ -54,7 +56,7 @@
       <div id="device-list"></div>
 
       <div class="nav-section-title">Reference</div>
-      <div class="nav-item" onclick="window.open('REGISTERS.md','_blank')">
+      <div class="nav-item" onclick="window.open('docs/REGISTERS.md','_blank')">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 013 3v13a2 2 0 00-2-2H4V4z"/><path d="M20 4h-6a3 3 0 00-3 3v13a2 2 0 012-2h7V4z"/></svg>
         <span>Register Map</span>
       </div>
@@ -99,7 +101,7 @@
         <div class="visualizer-col">
           <div class="mouse-stage">
             <div class="device-frame">
-              <img class="mouse-img" src="mouse_tk-gm012.png" alt="TECKNET TK-GM012">
+              <img class="mouse-img" src="images/mouse_tk-gm012.png" alt="TECKNET TK-GM012">
               <span class="dpi-slit-led" id="live-led"></span>
             </div>
 
@@ -418,7 +420,9 @@
   </div>
 
   <div id="toast-container"></div>
-  <script src="../../js/devices.js"></script>
+  <script src="../../assets/js/devices.js"></script>
+  <script src="../../assets/js/theme.js"></script>
+  <script src="../../assets/js/studio.js"></script>
   <script src="driver.js"></script>
 </body>
 </html>
