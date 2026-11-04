@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChesHub | TECKNET TK-GM012 Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <aside id="sidebar">
+    <div class="sidebar-brand font-impact" onclick="location.href='../../index.html'" style="cursor:pointer;" title="Back to Hub">
+      &larr; CHES<span class="accent">HUB</span>
+    </div>
+
+    <div class="nav-menu">
+      <div class="nav-section-title">ECOSYSTEM</div>
+      <div class="nav-item font-impact" onclick="location.href='../../index.html'">DEVICES LIBRARY</div>
+
+      <div class="nav-section-title">ACTIVE HARDWARE</div>
+      <div class="nav-item active font-impact" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">BUTTONS</div>
+      <div class="nav-item font-impact" id="nav-tab-performance" onclick="switchTab('tab-performance')">PERFORMANCE</div>
+      <div class="nav-item font-impact" id="nav-tab-lighting" onclick="switchTab('tab-lighting')">LIGHTING</div>
+      <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER / SENSOR</div>
+      <div class="nav-item font-impact" id="nav-tab-macro" onclick="switchTab('tab-macro')">MACRO</div>
+      <div class="nav-item font-impact" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">PROFILES</div>
+
+      <div class="nav-section-title">REFERENCE</div>
+      <div class="nav-item font-impact" onclick="window.open('PROTOCOL.md','_blank')">PROTOCOL NOTES</div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="hud-card">
+        <div class="hud-row">
+          <span class="hud-label">HARDWARE STATUS</span>
+          <div class="hud-status">
+            <div class="status-dot" id="hud-dot"></div>
+            <span id="hud-status">STANDBY</span>
+          </div>
+        </div>
+        <div class="hud-row" style="margin-top:6px;">
+          <span class="hud-label">BATTERY LEVEL</span>
+          <span id="hud-battery-text">--%</span>
+        </div>
+        <div class="battery-track"><div class="battery-fill" id="hud-battery-bar"></div></div>
+        <div class="hud-row" style="margin-top:6px;">
+          <span class="hud-label">LINK MODE</span>
+          <span id="hud-mode">NONE</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div id="main-content">
+    <header class="top-header">
+      <div class="header-left">
+        <span class="device-title font-impact">TECKNET TK-GM012</span>
+        <span class="fw-tag" id="header-fw">FW: --</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn-ghost font-impact" id="btn-sync" type="button">SYNC</button>
+        <button class="btn-primary font-impact" id="btn-connect" type="button">CONNECT / APPLY</button>
+      </div>
+    </header>
+
+    <div class="scroll-area">
+      <div class="studio-layout">
+
+        <div class="visualizer-col">
+          <div class="mouse-stage">
+            <svg class="stage-svg" viewBox="0 0 480 480" aria-hidden="true">
+              <polyline points="152,82 200,82 208,104"/>
+              <polyline points="328,82 280,82 272,104"/>
+              <polyline points="328,156 302,156 294,142"/>
+              <polyline points="152,218 188,218 196,206"/>
+              <polyline points="152,284 190,284 198,272"/>
+              <polyline points="328,284 294,284 286,266"/>
+            </svg>
+
+            <svg class="mouse-svg" viewBox="0 0 240 380" aria-hidden="true">
+              <defs>
+                <linearGradient id="shell" x1="0" y1="0" x2="0.65" y2="1">
+                  <stop offset="0" stop-color="#2b3846"/>
+                  <stop offset="0.45" stop-color="#18212b"/>
+                  <stop offset="1" stop-color="#0b1016"/>
+                </linearGradient>
+                <linearGradient id="gloss" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+                  <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.02"/>
+                  <stop offset="1" stop-color="#000000" stop-opacity="0.35"/>
+                </linearGradient>
+              </defs>
+              <path class="shell" d="M120 8c50 0 84 50 84 126v104c0 72-36 134-84 134s-84-62-84-134V134C36 58 70 8 120 8z"/>
+              <path class="gloss" d="M120 8c50 0 84 50 84 126v104c0 72-36 134-84 134s-84-62-84-134V134C36 58 70 8 120 8z"/>
+              <line class="seam" x1="120" y1="10" x2="120" y2="112"/>
+              <line class="seam" x1="38" y1="112" x2="202" y2="112"/>
+              <rect class="wheel" x="111" y="50" width="18" height="54" rx="9"/>
+              <rect class="side-btn" x="28" y="150" width="14" height="28" rx="7"/>
+              <rect class="side-btn" x="28" y="186" width="14" height="28" rx="7"/>
+              <path class="logo" d="M120 300l14-18 14 18-14 9z"/>
+            </svg>
+
+            <div class="dpi-slit-led" id="live-led"></div>
+
+            <div class="btn-anchor" id="anchor-0">
+              <span class="btn-anchor-label" id="anchor-label-0">1. Left Click</span>
+              <select id="btn-select-0"></select>
+            </div>
+            <div class="btn-anchor" id="anchor-1">
+              <span class="btn-anchor-label" id="anchor-label-1">2. Right Click</span>
+              <select id="btn-select-1"></select>
+            </div>
+            <div class="btn-anchor" id="anchor-2">
+              <span class="btn-anchor-label" id="anchor-label-2">3. Middle Click</span>
+              <select id="btn-select-2"></select>
+            </div>
+            <div class="btn-anchor" id="anchor-3">
+              <span class="btn-anchor-label" id="anchor-label-3">4. Backward</span>
+              <select id="btn-select-3"></select>
+            </div>
+            <div class="btn-anchor" id="anchor-4">
+              <span class="btn-anchor-label" id="anchor-label-4">5. Forward</span>
+              <select id="btn-select-4"></select>
+            </div>
+            <div class="btn-anchor" id="anchor-5">
+              <span class="btn-anchor-label" id="anchor-label-5">6. DPI Loop</span>
+              <select id="btn-select-5"></select>
+            </div>
+          </div>
+
+          <div class="stage-caption">
+            <span class="caption-tag">6 BUTTONS</span>
+            <span class="caption-tag">6 DPI STAGES</span>
+            <span class="caption-tag">2.4G / USB</span>
+          </div>
+        </div>
+
+        <div class="panels-col">
+
+          <!-- BUTTONS -->
+          <div class="tab-panel active" id="tab-buttons">
+            <div class="panel-section">
+              <div class="section-title font-impact">BUTTON FUNCTION</div>
+              <div class="section-desc">Assign an action to each of the six physical buttons.</div>
+              <div class="key-grid">
+                <div class="key-row"><span class="key-tag">KEY 1</span><span class="key-hint">Left button</span></div>
+                <div class="key-row"><span class="key-tag">KEY 2</span><span class="key-hint">Right button</span></div>
+                <div class="key-row"><span class="key-tag">KEY 3</span><span class="key-hint">Wheel click</span></div>
+                <div class="key-row"><span class="key-tag">KEY 4</span><span class="key-hint">Side, front</span></div>
+                <div class="key-row"><span class="key-tag">KEY 5</span><span class="key-hint">Side, rear</span></div>
+                <div class="key-row"><span class="key-tag">KEY 6</span><span class="key-hint">DPI loop</span></div>
+              </div>
+              <div class="section-actions">
+                <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">RESET ALL KEYS</button>
+                <button class="btn-primary font-impact" id="btn-apply-keys" type="button">WRITE TO DEVICE</button>
+              </div>
+              <p class="section-note">
+                Mappings are always saved to your ChesHub profile. Writing them to the
+                mouse uses command <code>0x08</code>, whose record encoding is only
+                partially recovered — see <code>PROTOCOL.md</code>.
+              </p>
+            </div>
+          </div>
+
+          <!-- PERFORMANCE -->
+          <div class="tab-panel" id="tab-performance">
+            <div class="panel-section">
+              <div class="section-title font-impact">DPI SENSITIVITY</div>
+              <div class="section-desc">Six stages, 50 to 24000 CPI. The active stage lights up on the mouse.</div>
+
+              <div class="dpi-toolbar">
+                <label class="inline-label" for="sel-dpi-count">DPI COUNT</label>
+                <select id="sel-dpi-count" class="select-compact">
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6" selected>6</option>
+                </select>
+              </div>
+
+              <div class="dpi-grid" id="dpi-grid"></div>
+
+              <div class="slider-wrap dpi-slider">
+                <input type="range" id="rng-dpi" min="50" max="24000" step="50" value="800">
+                <span class="val-badge" id="lbl-dpi">800</span>
+                <input type="color" id="inp-dpi-color" class="color-chip" value="#00ff00">
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <div class="section-title font-impact">REPORT RATE</div>
+              <div class="section-desc">Polling frequency. Higher is smoother, at the cost of battery.</div>
+              <div class="segmented" id="rate-control">
+                <button class="seg-btn" data-rate="125" type="button">125 HZ</button>
+                <button class="seg-btn" data-rate="250" type="button">250 HZ</button>
+                <button class="seg-btn" data-rate="500" type="button">500 HZ</button>
+                <button class="seg-btn active" data-rate="1000" type="button">1000 HZ</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- LIGHTING -->
+          <div class="tab-panel" id="tab-lighting">
+            <div class="panel-section">
+              <div class="section-title font-impact">LIGHT MODE</div>
+              <div class="section-desc">Six firmware modes. Preview updates live, apply writes to the mouse.</div>
+              <div class="lighting-grid" id="lighting-grid"></div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Brightness</div>
+                  <div class="form-hint">Packed into the high nibble of the lighting payload.</div>
+                </div>
+                <div class="slider-wrap">
+                  <input type="range" id="rng-brightness" min="0" max="15" value="8">
+                  <span class="val-badge" id="lbl-brightness">8</span>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Speed</div>
+                  <div class="form-hint">Animation rate, 0 (slowest) to 15 (fastest).</div>
+                </div>
+                <div class="slider-wrap">
+                  <input type="range" id="rng-speed" min="0" max="15" value="5">
+                  <span class="val-badge" id="lbl-speed">5</span>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Colour</div>
+                  <div class="form-hint">Used by the steady and neon modes.</div>
+                </div>
+                <input type="color" id="inp-light-color" class="color-chip" value="#2ee6c5">
+              </div>
+
+              <div class="section-actions">
+                <button class="btn-ghost font-impact" id="btn-reset-light" type="button">RESET LIGHTING</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- POWER / SENSOR -->
+          <div class="tab-panel" id="tab-power">
+            <div class="panel-section">
+              <div class="section-title font-impact">POWER MANAGEMENT</div>
+              <div class="section-desc">Sleep timer and wake behaviour for the 2.4G link.</div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Sleep timeout</div>
+                  <div class="form-hint">Idle time before the sensor powers down.</div>
+                </div>
+                <select id="sel-sleep" class="select-compact">
+                  <option value="1">1 min</option>
+                  <option value="5">5 min</option>
+                  <option value="10">10 min</option>
+                  <option value="15">15 min</option>
+                  <option value="30">30 min</option>
+                  <option value="60">60 min</option>
+                  <option value="180">180 min</option>
+                </select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Move wake-up</div>
+                  <div class="form-hint">Wake the mouse as soon as it is moved.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="chk-wake" checked><span class="slider"></span></label>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Light off when idle</div>
+                  <div class="form-hint">Extinguish the LED while asleep.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="chk-closelight"><span class="slider"></span></label>
+              </div>
+            </div>
+
+            <div class="panel-section">
+              <div class="section-title font-impact">SENSOR</div>
+              <div class="section-desc">Lift-off distance and the two sensor option bits.</div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Lift-off distance</div>
+                  <div class="form-hint">Height at which tracking stops.</div>
+                </div>
+                <div class="segmented" id="lod-control">
+                  <button class="seg-btn active" data-lod="1" type="button">1 MM</button>
+                  <button class="seg-btn" data-lod="2" type="button">2 MM</button>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Sensor option A</div>
+                  <div class="form-hint">Bit 8 of <code>sensor_flag</code>.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="chk-sensor-a" checked><span class="slider"></span></label>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Sensor option B</div>
+                  <div class="form-hint">Bit 4 of <code>sensor_flag</code>.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="chk-sensor-b"><span class="slider"></span></label>
+              </div>
+            </div>
+
+            <div class="panel-section danger-zone">
+              <div class="section-title font-impact">RESTORE</div>
+              <div class="section-desc">Writes <code>0x0F 01 FF</code>, which resets DPI, lighting,
+                keys and power settings on the mouse.</div>
+              <button class="btn-ghost font-impact" id="btn-factory" type="button">RESTORE FACTORY DEFAULTS</button>
+            </div>
+          </div>
+
+          <!-- MACRO -->
+          <div class="tab-panel" id="tab-macro">
+            <div class="panel-section">
+              <div class="section-title font-impact">MACRO RECORDER</div>
+              <div class="section-desc">Capture keystrokes while this page has focus, then review the sequence.</div>
+
+              <div class="section-actions">
+                <button class="btn-primary font-impact" id="btn-record" type="button">RECORD</button>
+                <button class="btn-ghost font-impact" id="btn-clear-macro" type="button">CLEAR</button>
+              </div>
+
+              <div class="macro-toolbar">
+                <label class="inline-label" for="inp-delay">DELAY (MS)</label>
+                <input type="number" id="inp-delay" class="input-compact" value="100" min="1" max="5000">
+                <button class="btn-ghost font-impact small" id="btn-add-delay" type="button">ADD DELAY</button>
+              </div>
+
+              <div class="macro-steps" id="macro-steps"></div>
+
+              <p class="section-note">
+                The mouse stores at most six 4-byte records per key
+                (<code>GetMouseMacroData</code> caps the count). Playback happens on the
+                mouse itself — nothing runs here after upload.
+              </p>
+            </div>
+          </div>
+
+          <!-- PROFILES -->
+          <div class="tab-panel" id="tab-profiles">
+            <div class="panel-section">
+              <div class="section-title font-impact">PROFILE SLOTS</div>
+              <div class="section-desc">Profiles live in this browser and travel with your ChesHub checkout.</div>
+
+              <div class="profile-toolbar">
+                <input type="text" id="inp-profile-name" class="input-compact" placeholder="Profile name" value="Profile 1">
+                <button class="btn-primary font-impact" id="btn-save-profile" type="button">SAVE</button>
+              </div>
+
+              <div class="profile-list" id="profile-list"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+  <script src="driver.js"></script>
+</body>
+</html>
