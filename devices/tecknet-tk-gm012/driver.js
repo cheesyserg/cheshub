@@ -230,6 +230,7 @@ const DEFAULTS = {
 const DEFAULT_STAGE = 1;
 
 let state = structuredClone(DEFAULTS);
+let wallpaper = { image: "", motion: true };
 let hidDevice = null;
 let deviceInfo = null;
 let batteryLevel = null;
@@ -893,10 +894,7 @@ function isOurs(device) {
 
 function updateHud() {
   const online = !!(hidDevice && hidDevice.opened);
-  const linked = online && !!deviceInfo;
-  const status = $("hud-status");
   const mode = $("hud-mode");
-  if (status) status.textContent = !online ? "Standby" : (linked ? "Online" : "No reply");
   const connectBtn = $("btn-connect");
   if (connectBtn) connectBtn.textContent = online ? "Apply" : "Connect";
   if (mode) {
@@ -911,12 +909,32 @@ function updateHud() {
   if (text) {
     if (pct === null) text.textContent = online ? "n/a" : "--%";
     else text.textContent = `${pct}%${charging ? " ⚡" : ""}`;
-    text.style.color = pct !== null && pct <= 20 ? "#ff4655" : "";
+    text.style.color = pct !== null && pct <= 20 ? "#e05561" : "";
   }
   if (bar) {
     bar.style.width = pct === null ? "0%" : `${pct}%`;
-    bar.style.background = pct !== null && pct <= 20 ? "#ff4655" : "";
+    bar.style.background = pct !== null && pct <= 20 ? "#e05561" : "";
   }
+
+  updateLock();
+}
+
+/* The configuration panels stay locked until the vendor collection answers.
+   Diagnostics and Appearance stay available so pairing and wallpapers can be
+   changed while offline. */
+function updateLock() {
+  const online = !!(hidDevice && hidDevice.opened);
+  const unlockedTab = ["tab-diagnostics", "tab-appearance"].some((id) => {
+    const panel = $(id);
+    return panel && panel.classList.contains("active");
+  });
+  const overlay = $("lock-overlay");
+  const showLock = !online && !unlockedTab;
+  if (overlay) overlay.hidden = !showLock;
+  const connect = $("btn-connect");
+  if (connect) connect.hidden = showLock;
+  const sync = $("btn-sync");
+  if (sync) sync.disabled = !online;
 }
 
 function updateDiagnostics() {
@@ -995,6 +1013,7 @@ function switchTab(tabId) {
   const nav = $("nav-" + tabId);
   if (nav) nav.classList.add("active");
   saveState();
+  updateLock();
 }
 
 function buildKeySelects() {
@@ -1215,6 +1234,8 @@ function refreshUI() {
   }
   const wake = $("chk-wake");
   if (wake) wake.checked = state.moveWake;
+
+  applyAppearance();
 }
 
 /* ---------------------------------------------------------------- persistence */
@@ -1223,6 +1244,82 @@ function saveState() {
   try {
     localStorage.setItem("tk-gm012.state", JSON.stringify(state));
   } catch (err) { /* storage disabled */ }
+}
+
+function loadWallpaper() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("tk-gm012.wallpaper") || "null");
+    if (raw && typeof raw.image === "string") wallpaper.image = raw.image;
+    if (raw && typeof raw.motion === "boolean") wallpaper.motion = raw.motion;
+  } catch (err) { /* ignore */ }
+}
+
+function saveWallpaper() {
+  try {
+    localStorage.setItem("tk-gm012.wallpaper", JSON.stringify(wallpaper));
+  } catch (err) {
+    showToast("Wallpaper is too large to store");
+  }
+}
+
+function applyAppearance() {
+  const hasImage = !!wallpaper.image;
+  document.body.classList.toggle("wp-image", hasImage);
+  document.body.classList.toggle("wp-static", !wallpaper.motion);
+
+  const layer = $("wallpaper");
+  if (layer) layer.style.backgroundImage = hasImage ? `url("${wallpaper.image}")` : "";
+
+  const motion = $("chk-motion");
+  if (motion) motion.checked = wallpaper.motion;
+
+  const clear = $("btn-wallpaper-clear");
+  if (clear) clear.disabled = !hasImage;
+
+  const choose = $("btn-wallpaper-file");
+  if (choose) choose.textContent = hasImage ? "Replace Image" : "Choose Image";
+
+  const status = $("wallpaper-status");
+  if (status) {
+    status.textContent = hasImage
+      ? "Custom image in use. It stays in this browser."
+      : "Using the animated backdrop.";
+  }
+}
+
+function readWallpaperFile(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) return showToast("Choose an image file");
+  if (file.size > 15 * 1024 * 1024) return showToast("Image is larger than 15 MB");
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1920;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return showToast("Could not process that image");
+      ctx.drawImage(img, 0, 0, width, height);
+      try {
+        wallpaper.image = canvas.toDataURL("image/jpeg", 0.82);
+      } catch (err) {
+        return showToast("Could not process that image");
+      }
+      applyAppearance();
+      saveWallpaper();
+      showToast("Wallpaper updated");
+    };
+    img.onerror = () => showToast("Could not decode that image");
+    img.src = String(reader.result);
+  };
+  reader.onerror = () => showToast("Could not read that file");
+  reader.readAsDataURL(file);
 }
 
 function saveMacro() {
@@ -1482,6 +1579,7 @@ function macroKeyHook(event) {
 
 document.addEventListener("DOMContentLoaded", () => {
   restoreState();
+  loadWallpaper();
   loadMacro();
   refreshUI();
   updateHud();
@@ -1505,6 +1603,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (hidDevice && hidDevice.opened) applyAll();
     else requestPairWith(FILTERS);
   });
+  $("btn-lock-connect")?.addEventListener("click", () => requestPairWith(FILTERS));
   $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS_ALL, "all interfaces"));
   $("btn-pair-scan")?.addEventListener("click", () => requestPairWith(FILTERS_VENDOR, "vendor scan"));
 
@@ -1532,6 +1631,24 @@ document.addEventListener("DOMContentLoaded", () => {
   $("btn-sync")?.addEventListener("click", async () => {
     const ok = await syncFromDevice();
     showToast(ok ? "Synced from device" : "Connect the mouse first");
+  });
+
+  $("chk-motion")?.addEventListener("change", (e) => {
+    wallpaper.motion = e.target.checked;
+    applyAppearance();
+    saveWallpaper();
+  });
+  $("btn-wallpaper-file")?.addEventListener("click", () => $("inp-wallpaper-file")?.click());
+  $("inp-wallpaper-file")?.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    readWallpaperFile(file);
+  });
+  $("btn-wallpaper-clear")?.addEventListener("click", () => {
+    wallpaper.image = "";
+    applyAppearance();
+    saveWallpaper();
+    showToast("Wallpaper removed");
   });
 
   $("btn-read-keys")?.addEventListener("click", async () => {

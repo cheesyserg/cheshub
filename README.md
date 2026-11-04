@@ -34,6 +34,8 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Macro recorder with keyboard/modifier events (up to six), per-key upload and
   once / repeat / toggle playback
 - Named profile slots, factory restore
+- Frosted-glass studio with an animated backdrop or a custom wallpaper, stored
+  in the browser only
 
 Which features exist at all is defined by the vendor's own
 `device/mouse_tk-gm012.xml`, not by guesswork: `<menu light="0"/>` means there

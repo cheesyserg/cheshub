@@ -3,26 +3,24 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2300b8ff'/%3E%3Ctext x='16' y='23' font-family='Segoe UI,Arial' font-size='19' font-weight='700' text-anchor='middle' fill='%23041017'%3EC%3C/text%3E%3C/svg%3E">
+  <meta name="theme-color" content="#101012">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%232f9fdd'/%3E%3Ctext x='16' y='23' font-family='Segoe UI,Arial' font-size='19' font-weight='700' text-anchor='middle' fill='%230d1114'%3EC%3C/text%3E%3C/svg%3E">
   <title>ChesHub | TECKNET TK-GM012 Studio</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+  <div class="ambient" id="ambient" aria-hidden="true">
+    <span class="ambient-blob blob-a"></span>
+    <span class="ambient-blob blob-b"></span>
+    <span class="ambient-blob blob-c"></span>
+  </div>
+  <div class="wallpaper" id="wallpaper" aria-hidden="true"></div>
+
   <aside id="sidebar">
     <div class="sidebar-brand" onclick="location.href='../../index.html'" title="Back to Hub">
       <span class="brand-mark">C</span>
       <span class="brand-name">ChesHub</span>
-    </div>
-
-    <div class="device-tile">
-      <div class="device-thumb">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/></svg>
-      </div>
-      <div class="device-meta">
-        <div class="device-name">TK-GM012</div>
-        <div class="device-sub">Wireless Gaming Mouse</div>
-      </div>
     </div>
 
     <div class="nav-menu">
@@ -53,6 +51,10 @@
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
         <span>Profiles</span>
       </div>
+      <div class="nav-item" id="nav-tab-appearance" onclick="switchTab('tab-appearance')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M12 21a3 3 0 010-6 3 3 0 003-3"/></svg>
+        <span>Appearance</span>
+      </div>
 
       <div class="nav-section-title">Reference</div>
       <div class="nav-item" onclick="window.open('REGISTERS.md','_blank')">
@@ -63,12 +65,6 @@
 
     <div class="sidebar-footer">
       <div class="hud-card">
-        <div class="hud-row">
-          <span class="hud-label">Status</span>
-          <div class="hud-status">
-            <span id="hud-status">Standby</span>
-          </div>
-        </div>
         <div class="hud-row">
           <span class="hud-label">Battery</span>
           <span id="hud-battery-text">--%</span>
@@ -305,6 +301,38 @@
             </div>
           </div>
 
+          <!-- APPEARANCE -->
+          <div class="tab-panel" id="tab-appearance">
+            <div class="panel-section">
+              <div class="section-title">Background</div>
+              <div class="section-desc">The studio renders frosted glass panels over a live
+                backdrop. Keep the animated gradient or use your own wallpaper.</div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Animate backdrop</div>
+                  <div class="form-hint">Slow drift of the colours or the wallpaper.</div>
+                </div>
+                <label class="toggle"><input type="checkbox" id="chk-motion" checked><span class="slider"></span></label>
+              </div>
+
+              <div class="form-row">
+                <div class="form-info">
+                  <div class="form-label">Wallpaper</div>
+                  <div class="form-hint" id="wallpaper-status">Using the animated backdrop.</div>
+                </div>
+                <div class="wallpaper-actions">
+                  <input type="file" id="inp-wallpaper-file" accept="image/*" hidden>
+                  <button class="btn-ghost" id="btn-wallpaper-file" type="button">Choose Image</button>
+                  <button class="btn-ghost" id="btn-wallpaper-clear" type="button">Remove</button>
+                </div>
+              </div>
+
+              <p class="section-note">Images are resized to 1920 px and stored in this browser
+                only. They are never uploaded anywhere.</p>
+            </div>
+          </div>
+
           <!-- DIAGNOSTICS -->
           <div class="tab-panel" id="tab-diagnostics">
             <div class="panel-section">
@@ -367,6 +395,22 @@
           </div>
 
         </div>
+      </div>
+    </div>
+
+    <div class="lock-overlay" id="lock-overlay" hidden>
+      <div class="lock-card">
+        <div class="lock-icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 01-6 6 6 6 0 01-6-6V8zM12 18v4"/></svg>
+        </div>
+        <div class="lock-title">Device not connected</div>
+        <p class="lock-text">Connect your TK-GM012 to configure buttons, sensitivity, power
+          and macros.</p>
+        <div class="lock-actions">
+          <button class="btn-primary" id="btn-lock-connect" type="button">Connect</button>
+          <button class="btn-ghost" type="button" onclick="switchTab('tab-diagnostics')">Diagnostics</button>
+        </div>
+        <a class="lock-link" href="../../index.html">Back to Hub</a>
       </div>
     </div>
   </div>
