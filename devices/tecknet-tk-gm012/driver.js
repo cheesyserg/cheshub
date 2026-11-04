@@ -402,21 +402,25 @@ async function attach(device, announce, allowSwitch) {
   };
   outputReportId = pickReportId(device);
 
-  // Same open sequence as DriverComm::EnumerateDevice: read command 0x10.
-  const probe = await readDeviceInfo();
+  // A collection with no output report cannot carry the protocol; skip the
+  // pointless write attempts and move straight to finding a usable interface.
+  const canWrite = hasOutputReport(device);
+  const probe = canWrite
+    ? await readDeviceInfo()
+    : { ok: false, error: "this interface has no output report" };
   deviceInfo = probe.reply || null;
 
   updateHud();
   updateDiagnostics();
 
-  // Correct-looking collection but no answer: look for a better granted one,
-  // even during auto-connect, since the picker cannot distinguish the rows.
-  const silent = !probe.reply && !probe.error;
-  if (silent && allowSwitch !== false && await autoSwitchToAnswering(device)) return;
+  // No reply, or the write was refused ("Failed to write the report" means the
+  // collection has no such output report): look for a better granted one.
+  const unusable = !probe.reply;
+  if (unusable && allowSwitch !== false && await autoSwitchToAnswering(device)) return;
 
   if (announce) {
     if (!isVendorCollection(device)) {
-      showToast(`No vendor page (${pageSummary(device)}) — try another interface`);
+      showToast(`${pageKind(device)} — pick the vendor row`);
     } else if (probe.reply) {
       showToast(`Connected — device answered (${probe.reply.length} B)`);
     } else if (probe.error) {
@@ -440,6 +444,21 @@ function pageSummary(device) {
     if (!seen.includes(tag)) seen.push(tag);
   }
   return seen.join(", ") || "none";
+}
+
+/* Name the interface so the picker choice is obvious in the toast. */
+function pageKind(device) {
+  const pages = (device.collections || []).map((c) => c.usagePage);
+  if (pages.some((p) => p >= 0xFF00)) return "vendor interface";
+  if (pages.includes(0x0001)) return "mouse/keyboard interface";
+  if (pages.includes(0x000C)) return "consumer-control interface";
+  return "non-vendor interface";
+}
+
+/* Collection with no output report cannot carry the protocol at all — the
+   consumer-control interface is exactly this case. */
+function hasOutputReport(device) {
+  return (device.collections || []).some((c) => c.outputReports.size > 0);
 }
 
 /* The vendor always writes report id 0. If a unit's descriptor does not
@@ -532,7 +551,7 @@ function updateDiagnostics() {
   set("diag-ids", `0x${hidDevice.vendorId.toString(16).toUpperCase()} : 0x${hidDevice.productId.toString(16).toUpperCase()}`);
   set("diag-interface",
       vendor ? `vendor collection · ${pageSummary(hidDevice)} · report id ${outputReportId}`
-             : `no vendor page · ${pageSummary(hidDevice)}`,
+             : `${pageKind(hidDevice)} · ${pageSummary(hidDevice)}`,
       vendor ? "ok" : "bad");
   set("diag-info", deviceInfo ? `${deviceInfo.length} B [${hexOf(deviceInfo, 16)}]` : "no reply",
       deviceInfo ? "ok" : "bad");
@@ -541,19 +560,18 @@ function updateDiagnostics() {
 
   const list = $("diag-collections");
   if (list) {
-    const rows = (hidDevice.collections || []).flatMap((c) =>
-      (c.inputReports.size || c.outputReports.size || c.featureReports.size)
-        ? [`<div class="diag-row">
-             <span>usage page</span>
-             <code>0x${c.usagePage.toString(16).toUpperCase()}</code>
-             <span>usage</span>
-             <code>0x${c.usage.toString(16).toUpperCase()}</code>
-             <span class="diag-flag ${c.usagePage >= 0xFF00 ? "ok" : ""}">
-               ${c.outputReports.size} out</span>
-           </div>`]
-        : []);
+    const rows = (hidDevice.collections || []).map((c) => `
+      <div class="diag-row">
+        <span>usage page</span>
+        <code>0x${c.usagePage.toString(16).toUpperCase()}</code>
+        <span>usage</span>
+        <code>0x${c.usage.toString(16).toUpperCase()}</code>
+        <span class="diag-flag ${c.usagePage >= 0xFF00 ? "ok" : ""}">
+          ${c.inputReports.size} in / ${c.outputReports.size} out / ${c.featureReports.size} feat
+        </span>
+      </div>`);
     list.innerHTML = rows.length ? rows.join("")
-      : `<div class="macro-empty">No report collections exposed</div>`;
+      : `<div class="macro-empty">This interface exposes no collections</div>`;
   }
 }
 
