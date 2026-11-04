@@ -53,6 +53,12 @@ const setHud = (status, battery, mode) => {
 
   if (status && window.ChesHub) window.ChesHub.setConnected(status === "ONLINE");
 
+  if (battery !== undefined && battery !== null && window.ChesHubRegistry) {
+    const reading = { battery };
+    if (mode) reading.mode = mode;
+    window.ChesHubRegistry.saveTelemetry(document.body.dataset.device, reading);
+  }
+
   if (battery !== undefined && battery !== null) {
     if (bat) bat.innerText = `${battery}%`;
     if (bar) bar.style.width = `${Math.min(100, Math.max(0, battery))}%`;

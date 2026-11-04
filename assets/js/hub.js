@@ -15,26 +15,75 @@ function showToast(message) {
 // A registry filter may specify any subset of vendorId / productId /
 // usagePage / usage. Anything unspecified is a wildcard.
 function registryMatch(device) {
-  return REGISTRY.find((r) => (r.filters || []).some((f) => {
-    if (f.namePrefix !== undefined) return false;
-    if (f.vendorId !== undefined && f.vendorId !== device.vendorId) return false;
-    if (f.productId !== undefined && f.productId !== device.productId) return false;
-    if (f.usagePage === undefined) return true;
-    return (device.collections || []).some((c) =>
-      c.usagePage === f.usagePage && (f.usage === undefined || c.usage === f.usage));
-  }));
+  return window.ChesHubRegistry ? window.ChesHubRegistry.match(device) : undefined;
 }
 
-function renderDevices(onlineIds) {
+const LIMIT = 2;
+let devicesExpanded = false;
+let liveTelemetry = {};
+
+function connectionLabel(entry, device) {
+  if (entry.id === "tozo-ht3") return "Bluetooth";
+  if (entry.id === "tecknet-tk-gm012") return device && device.vendorId === 0x249A ? "2.4 GHz" : "USB";
+  if (entry.id === "ajazz-aj139") return device && device.vendorId === 0xA8A5 ? "2.4 GHz" : "USB";
+  return "USB";
+}
+
+function batteryText(entry) {
+  const stored = window.ChesHubRegistry ? window.ChesHubRegistry.loadTelemetry() : {};
+  const reading = liveTelemetry[entry.id] || stored[entry.id] || null;
+  const level = reading ? Number(reading.battery) : NaN;
+  if (!Number.isFinite(level)) return "—%";
+  return `${Math.round(level)}%${reading.charging ? " ⚡" : ""}`;
+}
+
+function renderDevices(pairedIds, deviceMap) {
   const grid = document.getElementById("devices-grid");
-  grid.innerHTML = REGISTRY.map((r) => `
-    <article class="device-card${onlineIds.has(r.id) ? " online" : ""}"
-             data-path="${r.path}" role="link" tabindex="0">
-      <div class="card-status">${onlineIds.has(r.id) ? "Online" : "Not paired"}</div>
+  const moreHost = document.getElementById("hub-more");
+  const paired = REGISTRY.filter((r) => pairedIds.has(r.id));
+
+  if (!paired.length) {
+    grid.innerHTML = `
+      <div class="empty-state">
+        <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/></svg>
+        <div class="empty-title">No paired devices</div>
+        <p class="empty-text">Use <strong>Pair Device</strong> to connect a supported mouse or headset.</p>
+      </div>`;
+    if (moreHost) moreHost.innerHTML = "";
+    return;
+  }
+
+  const visible = devicesExpanded ? paired : paired.slice(0, LIMIT);
+  const remaining = paired.length - visible.length;
+  const icons = (window.ChesHubRegistry && window.ChesHubRegistry.icons) || {};
+
+  grid.innerHTML = visible.map((r) => {
+    const device = deviceMap.get(r.id);
+    const art = r.image
+      ? `<img src="${r.image}" alt="" loading="lazy">`
+      : `<svg class="device-glyph" viewBox="0 0 24 24" aria-hidden="true">${icons[r.kind] || icons.mouse || ""}</svg>`;
+    const battery = batteryText(r);
+    const level = parseInt(battery, 10);
+    const low = Number.isFinite(level) && level <= 20;
+
+    return `
+    <article class="device-card" data-path="${r.path}" role="link" tabindex="0" aria-label="${r.name}" title="Open ${r.name}">
+      <div class="device-art">
+        ${art}
+        <div class="device-indicators">
+          <span class="indicator${low ? " battery-low" : ""}" data-battery-for="${r.id}">${battery}</span>
+          <span class="indicator">${connectionLabel(r, device)}</span>
+        </div>
+      </div>
       <div class="card-name">${r.name}</div>
-      <div class="card-desc">${r.type}</div>
-      <button class="btn-primary small" type="button">Open Studio</button>
-    </article>`).join("");
+    </article>`;
+  }).join("");
+
+  if (moreHost) {
+    moreHost.innerHTML = remaining > 0
+      ? `<button class="btn-ghost" id="btn-more-devices" type="button">Show ${remaining} more</button>`
+      : "";
+  }
 
   grid.querySelectorAll(".device-card").forEach((card) => {
     const open = () => { location.href = card.dataset.path; };
@@ -46,17 +95,124 @@ function renderDevices(onlineIds) {
       }
     });
   });
+
+  const more = document.getElementById("btn-more-devices");
+  if (more) {
+    more.addEventListener("click", () => {
+      devicesExpanded = true;
+      renderDevices(pairedIds, deviceMap);
+    });
+  }
+
+  visible.forEach((entry) => {
+    const device = deviceMap.get(entry.id);
+    if (!device) return;
+    readBattery(entry, device).then((reading) => {
+      if (!reading) return;
+      liveTelemetry[entry.id] = reading;
+      if (window.ChesHubRegistry) window.ChesHubRegistry.saveTelemetry(entry.id, reading);
+      const level = Math.round(reading.battery);
+      grid.querySelectorAll(`[data-battery-for="${entry.id}"]`).forEach((el) => {
+        el.textContent = `${level}%${reading.charging ? " ⚡" : ""}`;
+        el.classList.toggle("battery-low", level <= 20);
+      });
+    }).catch(() => { /* keep the cached value */ });
+  });
+}
+
+/* Battery reads are read-only queries copied from each device driver. A failed
+   or sleeping link falls back to the last value saved by the studio. */
+async function withOpen(device, task) {
+  const wasOpen = device.opened;
+  if (!wasOpen) {
+    try { await device.open(); } catch (err) { return null; }
+  }
+  try {
+    return await task();
+  } finally {
+    if (!wasOpen) {
+      try { await device.close(); } catch (err) { /* already closed */ }
+    }
+  }
+}
+
+function readTk(device) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      device.removeEventListener("inputreport", onReport);
+      resolve(value);
+    };
+    const onReport = (event) => {
+      const data = new Uint8Array(event.data.buffer);
+      if (data[0] === 0x10 && data[1] === 0) {
+        const level = data[13];
+        finish(level <= 100 ? { battery: level, charging: !!data[12] } : null);
+      }
+    };
+    device.addEventListener("inputreport", onReport);
+    timer = setTimeout(() => finish(null), 900);
+
+    const frame = new Uint8Array(33);
+    frame[1] = 0x10;
+    frame[32] = 0;
+    device.sendReport(0, frame.slice(1)).catch(() => {
+      device.sendReport(0, frame).catch(() => finish(null));
+    });
+  });
+}
+
+function readAjazz(device) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = null;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      device.removeEventListener("inputreport", onReport);
+      resolve(value);
+    };
+    const onReport = (event) => {
+      const data = new Uint8Array(event.data.buffer);
+      if (data[0] === 0xAA && data[1] === 0x30) {
+        const level = data[8];
+        finish(level <= 100 ? { battery: level, charging: !!data[9] } : null);
+      }
+    };
+    device.addEventListener("inputreport", onReport);
+    timer = setTimeout(() => finish(null), 900);
+
+    const packet = new Uint8Array(64);
+    packet[0] = 0x55; packet[1] = 0x30; packet[2] = 0xA5; packet[3] = 0x0B;
+    packet[4] = 0x2E; packet[5] = 0x01; packet[6] = 0x01; packet[7] = 0x01;
+    device.sendReport(0, packet).catch(() => finish(null));
+  });
+}
+
+function readBattery(entry, device) {
+  if (entry.id === "tecknet-tk-gm012") return withOpen(device, () => readTk(device));
+  if (entry.id === "ajazz-aj139") return withOpen(device, () => readAjazz(device));
+  return Promise.resolve(null);
 }
 
 async function checkPairedDevices() {
-  const onlineIds = new Set();
+  const pairedIds = new Set();
+  const deviceMap = new Map();
 
   if (navigator.hid) {
     try {
       const paired = await navigator.hid.getDevices();
       paired.forEach((device) => {
         const match = registryMatch(device);
-        if (match) onlineIds.add(match.id);
+        if (match) {
+          pairedIds.add(match.id);
+          deviceMap.set(match.id, device);
+        }
       });
     } catch (err) { /* permission denied */ }
   }
@@ -64,11 +220,11 @@ async function checkPairedDevices() {
   if (navigator.serial) {
     try {
       const ports = await navigator.serial.getPorts();
-      if (ports.length > 0) onlineIds.add("tozo-ht3");
+      if (ports.length > 0) pairedIds.add("tozo-ht3");
     } catch (err) { /* permission denied */ }
   }
 
-  renderDevices(onlineIds);
+  renderDevices(pairedIds, deviceMap);
 }
 
 function showProtocolSelection() {

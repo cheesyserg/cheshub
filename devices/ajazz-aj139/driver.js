@@ -100,6 +100,13 @@ function updateTelemetryHUD(connected, batteryPct = null, charging = false, mode
   const modeText = document.getElementById("hud-mode");
 
   if (window.ChesHub) window.ChesHub.setConnected(connected);
+  if (window.ChesHubRegistry) {
+    window.ChesHubRegistry.saveTelemetry(document.body.dataset.device, {
+      battery: connected ? batteryPct : null,
+      charging,
+      mode: connected ? mode : null
+    });
+  }
 
   if (batText) {
     batText.innerText = !connected

@@ -117,8 +117,8 @@
 .rgb-card.active { border-color: var(--accent); background: rgba(47, 159, 221, 0.07); }
 
 .rgb-preview { height: 5px; width: 100%; border-radius: 2px; }
-.rgb-name { font-size: 13px; font-weight: 600; color: var(--text); }
-.rgb-desc { font-size: 11px; color: var(--text-muted); }
+.rgb-name { font-size: 14px; font-weight: 600; color: var(--text); }
+.rgb-desc { font-size: 12px; color: var(--text-muted); }
 
 /* -------------------------------------------------------------- DPI stages */
 
@@ -138,7 +138,7 @@
   border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
-.dpi-stage-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.dpi-stage-name { font-size: 14px; font-weight: 600; color: var(--text); }
 
 /* ------------------------------------------------------------ responsive */
 

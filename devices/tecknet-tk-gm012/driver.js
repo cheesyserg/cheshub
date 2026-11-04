@@ -915,6 +915,14 @@ function updateHud() {
     bar.style.background = pct !== null && pct <= 20 ? "#e05561" : "";
   }
 
+  if (online && window.ChesHubRegistry) {
+    window.ChesHubRegistry.saveTelemetry(document.body.dataset.device, {
+      battery: batteryLevel,
+      charging,
+      mode: hidDevice.vendorId === WIRELESS.vendorId ? "2.4 GHz" : "USB"
+    });
+  }
+
   window.ChesHub?.setConnected(online);
 }
 

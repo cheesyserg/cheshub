@@ -3,7 +3,8 @@
 
 (function () {
   const STORAGE_KEY = "cheshub.wallpaper";
-  const data = { image: "", motion: true };
+  const PRESETS = ["aurora", "ocean", "sunset", "forest", "graphite"];
+  const data = { image: "", motion: true, preset: "aurora" };
 
   function notify(message) {
     if (typeof window.showToast === "function") window.showToast(message);
@@ -12,8 +13,10 @@
   function load() {
     try {
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-      if (raw && typeof raw.image === "string") data.image = raw.image;
-      if (raw && typeof raw.motion === "boolean") data.motion = raw.motion;
+      if (!raw) return;
+      if (typeof raw.image === "string") data.image = raw.image;
+      if (typeof raw.motion === "boolean") data.motion = raw.motion;
+      if (PRESETS.includes(raw.preset)) data.preset = raw.preset;
     } catch (err) { /* ignore */ }
   }
 
@@ -27,6 +30,7 @@
 
   function apply() {
     const hasImage = !!data.image;
+    document.body.dataset.wp = data.preset;
     document.body.classList.toggle("wp-image", hasImage);
     document.body.classList.toggle("wp-static", !data.motion);
 
@@ -35,6 +39,10 @@
 
     const motion = document.getElementById("chk-motion");
     if (motion) motion.checked = data.motion;
+
+    document.querySelectorAll(".wallpaper-swatch").forEach((swatch) => {
+      swatch.classList.toggle("active", !hasImage && swatch.dataset.preset === data.preset);
+    });
 
     const clear = document.getElementById("btn-wallpaper-clear");
     if (clear) clear.disabled = !hasImage;
@@ -46,7 +54,7 @@
     if (status) {
       status.textContent = hasImage
         ? "Custom image in use. It stays in this browser."
-        : "Using the animated backdrop.";
+        : "Using the built-in backdrop.";
     }
   }
 
@@ -87,9 +95,26 @@
 
   window.ChesHubTheme = { data, load, save, apply, readFile };
 
+  function guardBrowser() {
+    if (navigator.hid || navigator.serial) return;
+    if (document.getElementById("support-gate")) return;
+
+    const gate = document.createElement("div");
+    gate.id = "support-gate";
+    gate.className = "support-gate";
+    gate.innerHTML = `
+      <div class="support-card">
+        <div class="support-title">Browser not supported</div>
+        <p class="support-text">ChesHub talks to peripherals through WebHID and Web Serial. Open this page in Chrome or Edge on desktop to continue.</p>
+        <a class="btn-primary" href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer">Get Chrome</a>
+      </div>`;
+    document.body.appendChild(gate);
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
     load();
     apply();
+    guardBrowser();
 
     const motion = document.getElementById("chk-motion");
     if (motion) {
@@ -120,5 +145,14 @@
         notify("Wallpaper removed");
       });
     }
+
+    document.querySelectorAll(".wallpaper-swatch").forEach((swatch) => {
+      swatch.addEventListener("click", () => {
+        data.preset = swatch.dataset.preset || "aurora";
+        data.image = "";
+        apply();
+        save();
+      });
+    });
   });
 })();

@@ -310,7 +310,15 @@
             <div class="panel-section">
               <div class="section-title">Background</div>
               <div class="section-desc">The studio renders frosted glass panels over a live
-                backdrop. Keep the animated gradient or use your own wallpaper.</div>
+                backdrop. Pick a palette, animate it, or use your own image.</div>
+
+              <div class="wallpaper-grid" id="wallpaper-presets">
+                <button class="wallpaper-swatch" data-preset="aurora" type="button"><span class="wallpaper-preview"></span>Aurora</button>
+                <button class="wallpaper-swatch" data-preset="ocean" type="button"><span class="wallpaper-preview"></span>Ocean</button>
+                <button class="wallpaper-swatch" data-preset="sunset" type="button"><span class="wallpaper-preview"></span>Sunset</button>
+                <button class="wallpaper-swatch" data-preset="forest" type="button"><span class="wallpaper-preview"></span>Forest</button>
+                <button class="wallpaper-swatch" data-preset="graphite" type="button"><span class="wallpaper-preview"></span>Graphite</button>
+              </div>
 
               <div class="form-row">
                 <div class="form-info">
@@ -322,8 +330,8 @@
 
               <div class="form-row">
                 <div class="form-info">
-                  <div class="form-label">Wallpaper</div>
-                  <div class="form-hint" id="wallpaper-status">Using the animated backdrop.</div>
+                  <div class="form-label">Custom image</div>
+                  <div class="form-hint" id="wallpaper-status">Using the built-in backdrop.</div>
                 </div>
                 <div class="wallpaper-actions">
                   <input type="file" id="inp-wallpaper-file" accept="image/*" hidden>

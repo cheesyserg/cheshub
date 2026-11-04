@@ -34,8 +34,8 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Macro recorder with keyboard/modifier events (up to six), per-key upload and
   once / repeat / toggle playback
 - Named profile slots, factory restore
-- Frosted-glass studio with an animated backdrop or a custom wallpaper, stored
-  in the browser only
+- Frosted-glass studio with five animated background palettes and a custom
+  wallpaper, stored in the browser only
 
 Which features exist at all is defined by the vendor's own
 `device/mouse_tk-gm012.xml`, not by guesswork: `<menu light="0"/>` means there
@@ -78,6 +78,8 @@ Noise cancellation engine and hardware DSP equaliser over Bluetooth RFCOMM.
 
 The hosted site is served over HTTPS by GitHub Pages, so
 [cheesyserg.github.io/cheshub](https://cheesyserg.github.io/cheshub/) works as-is.
+Opening it in a browser without WebHID or Web Serial shows a blocking notice
+instead of a half-working UI.
 
 ## Usage
 
@@ -88,9 +90,11 @@ The hosted site is served over HTTPS by GitHub Pages, so
    the browser prompt.
 5. Change settings, then click **Apply**.
 
-Previously granted devices are marked **Online** on the hub; the browser
-remembers the grant. Every registered device is listed, so a studio can also
-be opened before pairing.
+Previous grants are remembered by the browser. Both the hub and the studio
+sidebar list only paired devices, showing two at a time with a **Show more**
+button; the sidebar always includes the device you are viewing. Hub cards show
+the device render, its battery level and the link type; the two mice are polled
+live, while the Bluetooth headset uses its last reading.
 
 ## How it works
 
@@ -179,7 +183,7 @@ icon included) and reload. On Linux, check `lsusb` and that nothing like
 `libratbag` grabbed the device.
 
 If it still does not appear, the registry filter may be too narrow for your
-board revision. Use **Scan All Vendor HID** on the hub (or **Scan Any Vendor
+board revision. Use **Scan Vendor HID** on the hub (or **Scan Any Vendor
 HID** in a device's Diagnostics panel): those list every vendor-defined HID
 collection the browser can see. Picking one there prints its `vendorId`,
 `productId` and usage pages — that is the information needed to add or fix a

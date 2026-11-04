@@ -28,19 +28,13 @@
         </div>
       </div>
       <div class="header-actions">
-        <button class="btn-ghost" id="btn-scan-vendor" type="button">Scan All Vendor HID</button>
-        <button class="btn-primary" id="btn-scan" type="button">Pair / Detect Hardware</button>
+        <button class="btn-ghost" id="btn-scan-vendor" type="button">Scan Vendor HID</button>
+        <button class="btn-primary" id="btn-scan" type="button">Pair Device</button>
       </div>
     </header>
 
-    <div class="hub-intro">
-      <div class="page-title">Devices</div>
-      <p class="hint-line">Chrome or Edge only. Close the vendor utility before pairing —
-        it holds the HID handle. A device can be opened without pairing; its studio asks
-        to connect.</p>
-    </div>
-
     <div class="devices-grid" id="devices-grid"></div>
+    <div class="hub-more" id="hub-more"></div>
     <pre class="scan-result" id="scan-result" hidden></pre>
   </div>
 

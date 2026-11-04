@@ -5,7 +5,7 @@ body { min-height: 100vh; }
 .hub-container {
   position: relative;
   width: 100%;
-  max-width: 1040px;
+  max-width: 900px;
   margin: 0 auto;
   padding: 44px 28px 64px;
 }
@@ -22,8 +22,8 @@ body { min-height: 100vh; }
 .hub-brand { display: flex; align-items: center; gap: 12px; }
 
 .brand-mark {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex: none;
   display: grid;
   place-items: center;
@@ -35,63 +35,134 @@ body { min-height: 100vh; }
   color: var(--text);
 }
 
-.brand-name { font-size: 17px; font-weight: 600; color: var(--text); }
-.subtitle { font-size: 11px; color: var(--text-muted); }
+.brand-name { font-size: 18px; font-weight: 600; color: var(--text); }
+.subtitle { font-size: 12px; color: var(--text-muted); }
 
 .header-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 
-.hub-intro { margin: 30px 0 16px; }
-
-.page-title { font-size: 20px; font-weight: 600; color: var(--text); }
-
-.hint-line {
-  max-width: 620px;
-  margin-top: 4px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--text-muted);
-}
-
 .devices-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 22px;
+  margin-top: 36px;
 }
 
 .device-card {
+  width: min(360px, 100%);
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 18px;
+  gap: 14px;
+  padding: 16px;
   background: var(--surface);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
 }
 
 .device-card:hover,
 .device-card:focus-visible {
   border-color: var(--border-strong);
   background: rgba(38, 38, 42, 0.7);
+  transform: translateY(-2px);
 }
 
-.card-status {
+.card-name {
+  padding: 0 4px 4px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text);
+}
+
+.device-art {
+  position: relative;
+  height: 280px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 70% at 50% 40%, rgba(47, 159, 221, 0.16), transparent 72%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.device-indicators {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+
+.indicator {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(10, 10, 12, 0.72);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
-  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
 }
 
-.device-card.online .card-status { color: var(--accent); }
+.indicator.battery-low { color: var(--danger); border-color: rgba(224, 85, 97, 0.4); }
 
-.card-name { font-size: 15px; font-weight: 600; color: var(--text); }
-.card-desc { font-size: 12px; color: var(--text-dim); }
+.device-art img {
+  max-width: 100%;
+  max-height: 258px;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 22px rgba(0, 0, 0, 0.45));
+  transition: transform 0.25s ease;
+}
 
-.device-card .btn-primary { margin-top: 13px; align-self: flex-start; }
+.device-card:hover .device-art img { transform: scale(1.04); }
+
+.device-glyph {
+  width: 96px;
+  height: 96px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hub-more { display: flex; justify-content: center; margin-top: 18px; }
+
+.empty-state {
+  width: 100%;
+  padding: 64px 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.empty-icon {
+  width: 50px;
+  height: 50px;
+  margin-bottom: 14px;
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.empty-title { font-size: 17px; font-weight: 600; color: var(--text-dim); }
+.empty-text { margin-top: 4px; font-size: 13px; line-height: 1.6; }
+.empty-text strong { color: var(--text-dim); font-weight: 600; }
 
 .scan-result {
   margin-top: 16px;
@@ -136,7 +207,7 @@ body { min-height: 100vh; }
 
 .modal-title {
   margin-bottom: 16px;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text);
   text-align: center;
@@ -153,5 +224,7 @@ body { min-height: 100vh; }
   .header-actions { width: 100%; }
   .header-actions .btn-primary,
   .header-actions .btn-ghost { flex: 1; }
-  .devices-grid { grid-template-columns: 1fr; }
+  .device-card { width: 100%; }
+  .device-art { height: 230px; }
+  .device-art img { max-height: 212px; }
 }
