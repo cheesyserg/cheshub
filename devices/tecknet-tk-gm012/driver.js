@@ -220,9 +220,25 @@ function isMouseStep(step) {
   return step.source === "mouse" || (step.source === undefined && MACRO_MOUSE_BUTTONS[step.key] !== undefined);
 }
 
-function macroStepLabel(step) {
-  if (isMouseStep(step)) return (MACRO_MOUSE_BUTTONS[step.key] || {}).label || step.key;
-  return MACRO_KEY_LABELS[step.key] || step.key;
+function escAttr(value) {
+  return String(value).replace(/[&<>"']/g, (ch) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[ch]));
+}
+
+/* One combined picker for the row editor, so a recorded keyboard event can be
+   turned into a mouse event (or the other way round) in place. */
+function macroKeyOptionsHtml(selected) {
+  const pick = (value, label) =>
+    `<option value="${escAttr(value)}"${value === selected ? " selected" : ""}>${escAttr(label)}</option>`;
+  const mouse = Object.entries(MACRO_MOUSE_BUTTONS)
+    .map(([value, button]) => pick(value, button.label)).join("");
+  const keyboard = MACRO_INSERT_KEYS
+    .map((key) => pick(key.value, key.label)).join("");
+  const known = MACRO_MOUSE_BUTTONS[selected] !== undefined || MACRO_KEY_LABELS[selected] !== undefined;
+  const extra = known ? "" : pick(selected, `${selected} (unsupported)`);
+  return `${extra}<optgroup label="Mouse buttons">${mouse}</optgroup>`
+    + `<optgroup label="Keyboard">${keyboard}</optgroup>`;
 }
 
 /* KeyboardEvent.code -> USB HID keyboard usage, the values
@@ -1172,16 +1188,34 @@ function syncDpiControls() {
 function buildMacroList() {
   const list = $("macro-steps");
   if (!list) return;
-  list.innerHTML = macroSteps.length
-    ? macroSteps.map((step, i) => `
-        <div class="macro-step">
+
+  if (!macroSteps.length) {
+    list.innerHTML = `<div class="macro-empty">No steps recorded</div>`;
+  } else {
+    list.innerHTML = macroSteps.map((step, i) => {
+      const editor = step.kind === "delay"
+        ? `<span class="macro-kind">Delay</span>
+           <input class="macro-delay input-compact" type="number" min="1" max="31000" step="1"
+             value="${Math.max(1, Math.round(Number(step.ms) || 1))}" aria-label="Delay in milliseconds">
+           <span class="macro-unit">ms</span>`
+        : `<select class="macro-type select-compact" aria-label="Event type">
+             <option value="down"${step.type === "down" ? " selected" : ""}>Press</option>
+             <option value="up"${step.type !== "down" ? " selected" : ""}>Release</option>
+           </select>
+           <select class="macro-key select-compact" aria-label="Key or button">
+             ${macroKeyOptionsHtml(step.key)}
+           </select>`;
+      return `<div class="macro-step" data-i="${i}">
           <span class="macro-index">${i + 1}</span>
-          <span class="macro-body">${step.kind === "delay"
-            ? `Delay ${step.ms} ms`
-            : `${step.type === "down" ? "Press" : "Release"} ${macroStepLabel(step)}`}</span>
-          <button class="macro-del" data-i="${i}" type="button">×</button>
-        </div>`).join("")
-    : `<div class="macro-empty">No steps recorded</div>`;
+          <div class="macro-edit">${editor}</div>
+          <div class="macro-actions">
+            <button class="macro-move" data-move="-1" type="button" aria-label="Move step up"${i === 0 ? " disabled" : ""}>↑</button>
+            <button class="macro-move" data-move="1" type="button" aria-label="Move step down"${i === macroSteps.length - 1 ? " disabled" : ""}>↓</button>
+            <button class="macro-del" type="button" aria-label="Delete step">×</button>
+          </div>
+        </div>`;
+    }).join("");
+  }
 
   const events = macroSteps.filter((s) => s.kind === "key").length;
   const delays = macroSteps.length - events;
@@ -1194,8 +1228,52 @@ function buildMacroList() {
 
   list.querySelectorAll(".macro-del").forEach((btn) => {
     btn.onclick = () => {
-      macroSteps.splice(Number(btn.dataset.i), 1);
+      macroSteps.splice(Number(btn.closest(".macro-step").dataset.i), 1);
       buildMacroList();
+      saveMacro();
+    };
+  });
+
+  list.querySelectorAll(".macro-move").forEach((btn) => {
+    btn.onclick = () => {
+      const from = Number(btn.closest(".macro-step").dataset.i);
+      const to = from + Number(btn.dataset.move);
+      if (to < 0 || to >= macroSteps.length) return;
+      const [step] = macroSteps.splice(from, 1);
+      macroSteps.splice(to, 0, step);
+      buildMacroList();
+      saveMacro();
+    };
+  });
+
+  const stepOf = (el) => macroSteps[Number(el.closest(".macro-step")?.dataset.i)];
+
+  list.querySelectorAll(".macro-type").forEach((select) => {
+    select.onchange = () => {
+      const step = stepOf(select);
+      if (!step) return;
+      step.type = select.value === "up" ? "up" : "down";
+      saveMacro();
+    };
+  });
+
+  list.querySelectorAll(".macro-key").forEach((select) => {
+    select.onchange = () => {
+      const step = stepOf(select);
+      if (!step) return;
+      step.key = select.value;
+      step.source = MACRO_MOUSE_BUTTONS[step.key] !== undefined ? "mouse" : "keyboard";
+      saveMacro();
+    };
+  });
+
+  list.querySelectorAll(".macro-delay").forEach((input) => {
+    input.onchange = () => {
+      const step = stepOf(input);
+      if (!step) return;
+      const ms = Math.max(1, Math.min(31000, Math.round(Number(input.value) || 0)));
+      step.ms = ms;
+      input.value = String(ms);
       saveMacro();
     };
   });

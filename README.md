@@ -32,8 +32,9 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Report rate 125 / 250 / 500 / 1000 Hz
 - Sleep timeout (1, 2, 5, 6, 10, 15, 20, 30 min) and move wake-up
 - Macro editor: records keyboard events with their real pauses, or lets you
-  insert keyboard and mouse-button events by hand (six events); per-key upload
-  with play-once, repeat-N, loop-until-click and loop-while-held playback
+  insert keyboard and mouse-button events by hand; every step can be edited,
+  reordered or deleted (six events), then uploaded per key with play-once,
+  repeat-N, loop-until-click and loop-while-held playback
 - Named profile slots, factory restore
 - Frosted-glass studio with six accent palettes, five animated background
   palettes and a custom wallpaper, stored in the browser only. Accent and
