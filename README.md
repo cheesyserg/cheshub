@@ -41,8 +41,10 @@ and factory defaults are transcribed from the same file.
 The only LED on this model is the DPI indicator under the wheel, so the studio
 has no lighting page — the API exposes the colour per DPI stage instead. The
 mouse answers on usage page `0xFFEF`, usage `0x00`; writes sent to the boot
-mouse collection are silently dropped, which is why the studio pins that
-collection in its pairing filter.
+mouse collection are silently dropped. Because Chrome lists one row per HID
+interface and they usually share a product name, the studio lists every
+interface of the brand and validates the collection after pairing, showing the
+one you got in **DIAGNOSTICS**.
 
 The wire protocol was reverse-engineered from the vendor tool and is documented
 in [`devices/tecknet-tk-gm012/PROTOCOL.md`](devices/tecknet-tk-gm012/PROTOCOL.md),

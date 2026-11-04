@@ -47,7 +47,9 @@ The collection is not optional. `DriverComm::FindDevice @ 0x4C3A0` walks the
 Pairing the boot mouse or keyboard collection instead produces writes the
 firmware silently ignores — no error, no reply. Trackpad/keyboard interfaces and
 the vendor collection often share the same product name in the browser picker,
-so a `usagePage` filter is the reliable way to select it.
+so the studio lists every interface of the brand and reports the one it got in
+DIAGNOSTICS rather than filtering on the page (a filter that pins
+`0xFFEF`/`0x00` shows an empty picker on units that describe it differently).
 
 The build uses the `__fastcall` convention (`/Gr`): first two arguments in
 `ECX`/`EDX`. That detail matters when reading the disassembly.

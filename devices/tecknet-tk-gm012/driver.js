@@ -11,26 +11,26 @@
  *
  * The vendor binds to one specific HID collection: DriverComm::FindDevice at
  * 0x4C3A0 rejects every interface whose usage_page is not 0xFFEF or whose
- * usage is not 0. Pairing a boot mouse/keyboard collection instead produces
- * writes the firmware silently drops, so the filter below is narrow.
+ * usage is not 0. Writes to a boot mouse/keyboard collection are silently
+ * dropped. The picker therefore stays permissive (any interface of the brand)
+ * and the collection is validated after pairing, because a filter that pins
+ * 0xFFEF/0x00 shows an empty picker when a unit describes it differently.
  */
-
-const VENDOR_USAGE_PAGE = 0xFFEF;
-const VENDOR_USAGE = 0x00;
 
 const WIRED = { vendorId: 0x248A, productId: 0x5D2E };
 const WIRELESS = { vendorId: 0x249A, productId: 0x5C2F };
 
+/* Pairing must not depend on the usage page: Chrome shows one row per HID
+   interface, and a filter that pins 0xFFEF/0x00 shows an empty picker on units
+   that describe the vendor collection differently. So the picker lists every
+   interface of the brand and the collection is validated after pairing. */
 const FILTERS = [
-  { ...WIRED, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE },
-  { ...WIRELESS, usagePage: VENDOR_USAGE_PAGE, usage: VENDOR_USAGE }
+  { vendorId: WIRED.vendorId },
+  { vendorId: WIRELESS.vendorId }
 ];
-const FILTERS_ANY = [WIRED, WIRELESS];
 
-/* Last resort: every vendor-defined usage page. A filter that pins 0xFFEF shows
-   an empty picker on units that describe the collection differently, so this
-   lets the device be paired anyway and the real page read back from
-   DIAGNOSTICS. */
+/* Last resort: every vendor-defined usage page, for a unit whose vendor id is
+   not in the list above. */
 const FILTERS_VENDOR = (() => {
   const out = [];
   for (let page = 0xFF00; page <= 0xFFFF; page++) out.push({ usagePage: page });
@@ -352,16 +352,31 @@ async function attach(device, announce) {
   updateHud();
   updateDiagnostics();
   if (announce) {
-    if (!isVendorCollection(device)) showToast("Wrong interface — see DIAGNOSTICS");
-    else if (probe.reply) showToast(`Connected — device answered (${probe.reply.length} B)`);
-    else if (probe.error) showToast(`Connected — ${probe.error}`);
-    else showToast("Connected — no reply, check DIAGNOSTICS");
+    if (!isVendorCollection(device)) {
+      showToast(`No vendor page (${pageSummary(device)}) — try another interface`);
+    } else if (probe.reply) {
+      showToast(`Connected — device answered (${probe.reply.length} B)`);
+    } else if (probe.error) {
+      showToast(`Connected — ${probe.error}`);
+    } else {
+      showToast("Connected — no reply, see DIAGNOSTICS");
+    }
   }
 }
 
+/* Any vendor-defined page counts. The vendor tool insists on 0xFFEF/0x00, but
+   gating the UI on that exact pair is what produced an empty picker. */
 function isVendorCollection(device) {
-  return (device.collections || []).some(
-    (c) => c.usagePage === VENDOR_USAGE_PAGE && c.usage === VENDOR_USAGE);
+  return (device.collections || []).some((c) => c.usagePage >= 0xFF00);
+}
+
+function pageSummary(device) {
+  const seen = [];
+  for (const c of device.collections || []) {
+    const tag = `0x${c.usagePage.toString(16).toUpperCase()}/${c.usage.toString(16).toUpperCase()}`;
+    if (!seen.includes(tag)) seen.push(tag);
+  }
+  return seen.join(", ") || "none";
 }
 
 /* The vendor always writes report id 0. If a unit's descriptor does not
@@ -382,14 +397,11 @@ async function autoConnect() {
     const paired = await navigator.hid.getDevices();
     const ours = paired.filter((d) =>
       [WIRED, WIRELESS].some((f) => f.vendorId === d.vendorId && f.productId === d.productId));
-    const good = ours.find(isVendorCollection);
-    if (good) {
-      await attach(good, false);
-    } else if (ours.length) {
-      // A previous grant bound the boot mouse/keyboard collection, where every
-      // write is silently dropped. Ask for a fresh pairing instead.
-      showToast("Re-pair the mouse — the saved permission bound the wrong interface");
-    }
+    if (!ours.length) return;
+    // Prefer the collection with a vendor-defined usage page; fall back to any
+    // granted interface so DIAGNOSTICS can show what the picker actually gave us.
+    const good = ours.find(isVendorCollection) || ours[0];
+    await attach(good, false);
   } catch (err) {
     /* ignore */
   }
@@ -437,8 +449,8 @@ function updateDiagnostics() {
   set("diag-product", hidDevice.productName || "(unnamed)");
   set("diag-ids", `0x${hidDevice.vendorId.toString(16).toUpperCase()} : 0x${hidDevice.productId.toString(16).toUpperCase()}`);
   set("diag-interface",
-      vendor ? `0x${VENDOR_USAGE_PAGE.toString(16).toUpperCase()} / 0x00 vendor collection · report id ${outputReportId}`
-             : "wrong collection — re-pair",
+      vendor ? `vendor collection · ${pageSummary(hidDevice)} · report id ${outputReportId}`
+             : `no vendor page · ${pageSummary(hidDevice)}`,
       vendor ? "ok" : "bad");
   set("diag-info", deviceInfo ? `${deviceInfo.length} B [${hexOf(deviceInfo, 16)}]` : "no reply",
       deviceInfo ? "ok" : "bad");
@@ -454,7 +466,7 @@ function updateDiagnostics() {
              <code>0x${c.usagePage.toString(16).toUpperCase()}</code>
              <span>usage</span>
              <code>0x${c.usage.toString(16).toUpperCase()}</code>
-             <span class="diag-flag ${c.usagePage === VENDOR_USAGE_PAGE && c.usage === VENDOR_USAGE ? "ok" : ""}">
+             <span class="diag-flag ${c.usagePage >= 0xFF00 ? "ok" : ""}">
                ${c.outputReports.size} out</span>
            </div>`]
         : []);
@@ -710,7 +722,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (hidDevice && hidDevice.opened) applyAll();
     else requestPairWith(FILTERS);
   });
-  $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS_ANY, "all interfaces"));
+  $("btn-pair-any")?.addEventListener("click", () => requestPairWith(FILTERS, "all interfaces"));
   $("btn-pair-scan")?.addEventListener("click", () => requestPairWith(FILTERS_VENDOR, "vendor scan"));
 
   $("btn-sync")?.addEventListener("click", () => {
