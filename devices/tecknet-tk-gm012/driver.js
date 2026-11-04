@@ -898,13 +898,18 @@ function updateHud() {
   const status = $("hud-status");
   const mode = $("hud-mode");
   if (dot) dot.classList.toggle("online", linked);
-  if (status) status.textContent = !online ? "STANDBY" : (linked ? "ONLINE" : "NO REPLY");
+  if (status) status.textContent = !online ? "Standby" : (linked ? "Online" : "No reply");
   const connectBtn = $("btn-connect");
-  if (connectBtn) connectBtn.textContent = online ? "APPLY" : "CONNECT";
+  if (connectBtn) connectBtn.textContent = online ? "Apply" : "Connect";
+  const deviceDot = $("device-status-dot");
+  if (deviceDot) {
+    deviceDot.classList.toggle("online", linked);
+    deviceDot.title = linked ? "Connected" : (online ? "No reply" : "Disconnected");
+  }
   if (mode) {
-    if (!online || !hidDevice) mode.textContent = "NONE";
-    else if (hidDevice.vendorId === WIRELESS.vendorId) mode.textContent = "2.4G WIRELESS";
-    else mode.textContent = charging ? "USB · CHARGING" : "USB WIRED";
+    if (!online || !hidDevice) mode.textContent = "None";
+    else if (hidDevice.vendorId === WIRELESS.vendorId) mode.textContent = "2.4 GHz";
+    else mode.textContent = charging ? "USB · charging" : "USB wired";
   }
 
   const text = $("hud-battery-text");
@@ -926,8 +931,8 @@ function updateDiagnostics() {
     const el = $(id);
     if (!el) return;
     el.textContent = text;
-    el.classList.remove("ok", "bad");
-    if (cls) el.classList.add(cls);
+    el.classList.remove("diag-ok", "diag-bad");
+    if (cls) el.classList.add("diag-" + cls);
   };
 
   if (!hidDevice) {
@@ -1035,7 +1040,7 @@ function buildKeySelects() {
 function updateDpiCaption() {
   const caption = $("caption-dpi");
   if (!caption) return;
-  caption.textContent = `${state.dpiCount} DPI STAGE${state.dpiCount === 1 ? "" : "S"}`;
+  caption.textContent = `${state.dpiCount} DPI stage${state.dpiCount === 1 ? "" : "s"}`;
 }
 
 function buildDpiCards() {
@@ -1044,8 +1049,12 @@ function buildDpiCards() {
   grid.innerHTML = state.dpi.map((stage, i) => `
     <button class="dpi-card${i === selectedStage ? " active" : ""}${i >= state.dpiCount ? " inactive" : ""}${i === state.dpiIndex ? " live" : ""}"
             data-stage="${i}" type="button">
-      <span class="dpi-card-head" style="background:${stage.color}">DPI ${i + 1}</span>
-      <span class="dpi-card-value" style="color:${stage.color}">${stage.value}</span>
+      <span class="dpi-card-head">
+        <span class="dpi-color-dot" style="background:${stage.color}"></span>
+        <span>DPI ${i + 1}</span>
+      </span>
+      <span class="dpi-card-value">${stage.value}</span>
+      <span class="dpi-card-status">${i === state.dpiIndex ? "Active" : ""}</span>
     </button>`).join("");
 
   grid.querySelectorAll(".dpi-card").forEach((card) => {
@@ -1131,8 +1140,8 @@ function buildProfiles() {
         <div class="profile-row">
           <span class="profile-name">${name}</span>
           <span class="profile-meta">${saved.savedAt || ""}</span>
-          <button class="btn-ghost small" data-load="${name}" type="button">LOAD</button>
-          <button class="btn-ghost small" data-del="${name}" type="button">DELETE</button>
+          <button class="btn-ghost small" data-load="${name}" type="button">Load</button>
+          <button class="btn-ghost small" data-del="${name}" type="button">Delete</button>
         </div>`).join("")
     : `<div class="macro-empty">No saved profiles</div>`;
 

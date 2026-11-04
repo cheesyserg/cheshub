@@ -78,11 +78,12 @@ The hosted site is served over HTTPS by GitHub Pages, so
 
 ## Usage
 
-1. Open the [hub](https://cheesyserg.github.io/cheshub/).
+1. Open the [hub](https://cheesyserg.github.io/cheshub/) and choose the device.
 2. Plug in the device (for a 2.4 GHz mouse, plug in the dongle).
 3. Close the vendor utility — Windows grants one handle per HID collection.
-4. Click **PAIR / DETECT HARDWARE**, pick the device in the browser prompt.
-5. Change settings, then **APPLY** / **APPLY ALL**.
+4. Click **Connect** in the studio header and pick the device in the browser
+   prompt.
+5. Change settings, then click **Apply**.
 
 Previously paired devices appear automatically on the hub's card grid; the
 browser remembers the grant.
@@ -161,7 +162,7 @@ icon included) and reload. On Linux, check `lsusb` and that nothing like
 `libratbag` grabbed the device.
 
 If it still does not appear, the registry filter may be too narrow for your
-board revision. Use **SCAN ALL VENDOR HID** on the hub (or **SCAN ANY VENDOR
+board revision. Use **Scan All Vendor HID** on the hub (or **Scan Any Vendor
 HID** in a device's Diagnostics panel): those list every vendor-defined HID
 collection the browser can see. Picking one there prints its `vendorId`,
 `productId` and usage pages — that is the information needed to add or fix a
@@ -173,11 +174,11 @@ GitHub Pages caches aggressively. Hard-reload with `Ctrl+Shift+R` (or
 build — the current studio always has it at the bottom of the sidebar.
 
 **The device is connected but every command times out**
-Open Diagnostics from the bottom of the sidebar. `INFO REPLY (0x10)` should
+Open Diagnostics from the bottom of the sidebar. **Info reply (0x10)** should
 show bytes after connecting, since
-every session starts with that read. If it says `no reply` while `INTERFACE` is
+every session starts with that read. If it says `no reply` while **Interface** is
 red, you are on the wrong HID collection; re-pair. If it says `no reply` while
-`INTERFACE` is green, the wire log shows exactly what was sent — attach it to a
+**Interface** is green, the wire log shows exactly what was sent — attach it to a
 bug report.
 
 **The prompt shows the device but writes fail**

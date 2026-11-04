@@ -2,48 +2,83 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%2300b8ff'/%3E%3Ctext x='16' y='23' font-family='Segoe UI,Arial' font-size='19' font-weight='700' text-anchor='middle' fill='%23041017'%3EC%3C/text%3E%3C/svg%3E">
   <title>ChesHub | TECKNET TK-GM012 Studio</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <aside id="sidebar">
-    <div class="sidebar-brand font-impact" onclick="location.href='../../index.html'" style="cursor:pointer;" title="Back to Hub">
-      &larr; CHES<span class="accent">HUB</span>
+    <div class="sidebar-brand" onclick="location.href='../../index.html'" title="Back to Hub">
+      <span class="brand-mark">C</span>
+      <span class="brand-name">ChesHub</span>
+    </div>
+
+    <div class="device-tile">
+      <div class="device-thumb">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/></svg>
+      </div>
+      <div class="device-meta">
+        <div class="device-name">TK-GM012</div>
+        <div class="device-sub">Wireless Gaming Mouse</div>
+      </div>
+      <span class="device-status" id="device-status-dot" title="Disconnected"></span>
     </div>
 
     <div class="nav-menu">
-      <div class="nav-section-title">DEVICES</div>
-      <div class="nav-item font-impact" onclick="location.href='../../index.html'">ALL DEVICES</div>
+      <div class="nav-section-title">General</div>
+      <div class="nav-item" onclick="location.href='../../index.html'">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        <span>All Devices</span>
+      </div>
 
-      <div class="nav-section-title">CONFIGURATION</div>
-      <div class="nav-item active font-impact" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">BUTTONS</div>
-      <div class="nav-item font-impact" id="nav-tab-performance" onclick="switchTab('tab-performance')">PERFORMANCE</div>
-      <div class="nav-item font-impact" id="nav-tab-power" onclick="switchTab('tab-power')">POWER</div>
-      <div class="nav-item font-impact" id="nav-tab-macro" onclick="switchTab('tab-macro')">MACRO</div>
-      <div class="nav-item font-impact" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">PROFILES</div>
+      <div class="nav-section-title">Configuration</div>
+      <div class="nav-item active" id="nav-tab-buttons" onclick="switchTab('tab-buttons')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l6.5 16 2.4-6.1L20 10.5 5 3z"/></svg>
+        <span>Assignments</span>
+      </div>
+      <div class="nav-item" id="nav-tab-performance" onclick="switchTab('tab-performance')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h7M15 18h5"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="13" cy="18" r="2"/></svg>
+        <span>Sensitivity</span>
+      </div>
+      <div class="nav-item" id="nav-tab-power" onclick="switchTab('tab-power')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        <span>Power</span>
+      </div>
+      <div class="nav-item" id="nav-tab-macro" onclick="switchTab('tab-macro')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M6 14h1M10 14h8"/></svg>
+        <span>Macros</span>
+      </div>
+      <div class="nav-item" id="nav-tab-profiles" onclick="switchTab('tab-profiles')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>
+        <span>Profiles</span>
+      </div>
 
-      <div class="nav-section-title">REFERENCE</div>
-      <div class="nav-item font-impact" onclick="window.open('REGISTERS.md','_blank')">REGISTER MAP</div>
+      <div class="nav-section-title">Reference</div>
+      <div class="nav-item" onclick="window.open('REGISTERS.md','_blank')">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 013 3v13a2 2 0 00-2-2H4V4z"/><path d="M20 4h-6a3 3 0 00-3 3v13a2 2 0 012-2h7V4z"/></svg>
+        <span>Register Map</span>
+      </div>
     </div>
 
     <div class="sidebar-footer">
       <div class="hud-card">
         <div class="hud-row">
-          <span class="hud-label">HARDWARE STATUS</span>
+          <span class="hud-label">Status</span>
           <div class="hud-status">
             <div class="status-dot" id="hud-dot"></div>
-            <span id="hud-status">STANDBY</span>
+            <span id="hud-status">Standby</span>
           </div>
         </div>
-        <div class="hud-row" style="margin-top:6px;">
-          <span class="hud-label">BATTERY LEVEL</span>
+        <div class="hud-row">
+          <span class="hud-label">Battery</span>
           <span id="hud-battery-text">--%</span>
         </div>
         <div class="battery-track"><div class="battery-fill" id="hud-battery-bar"></div></div>
-        <div class="hud-row" style="margin-top:6px;">
-          <span class="hud-label">LINK MODE</span>
-          <span id="hud-mode">NONE</span>
+        <div class="hud-row">
+          <span class="hud-label">Connection</span>
+          <span id="hud-mode">None</span>
         </div>
       </div>
       <button class="advanced-link" type="button" onclick="switchTab('tab-diagnostics')">Diagnostics</button>
@@ -53,11 +88,12 @@
   <div id="main-content">
     <header class="top-header">
       <div class="header-left">
-        <span class="device-title font-impact">TECKNET TK-GM012</span>
+        <span class="device-title">TK-GM012</span>
+        <span class="device-subtitle">Wireless Gaming Mouse</span>
       </div>
       <div class="header-actions">
-        <button class="btn-ghost font-impact" id="btn-sync" type="button" title="Read the whole configuration back from the mouse">SYNC</button>
-        <button class="btn-primary font-impact" id="btn-connect" type="button" title="Connect, or write report rate, DPI, colours and power">CONNECT</button>
+        <button class="btn-ghost" id="btn-sync" type="button" title="Read the whole configuration back from the mouse">Sync</button>
+        <button class="btn-primary" id="btn-connect" type="button" title="Connect, or write report rate, DPI, colours and power">Connect</button>
       </div>
     </header>
 
@@ -98,9 +134,9 @@
           </div>
 
           <div class="stage-caption">
-            <span class="caption-tag">6 BUTTONS</span>
+            <span class="caption-tag">6 buttons</span>
             <span class="caption-tag" id="caption-dpi" onclick="switchTab('tab-performance')"
-                  style="cursor:pointer;" title="Open Performance">6 DPI STAGES</span>
+                  style="cursor:pointer;" title="Open Sensitivity">6 DPI stages</span>
             <span class="caption-tag">2.4G / USB</span>
           </div>
         </div>
@@ -110,13 +146,13 @@
           <!-- BUTTONS -->
           <div class="tab-panel active" id="tab-buttons">
             <div class="panel-section">
-              <div class="section-title font-impact">BUTTON ASSIGNMENT</div>
+              <div class="section-title">Button Assignments</div>
               <div class="section-desc">Choose an action for each of the six buttons, then apply the
                 changes to the mouse.</div>
               <div class="section-actions">
-                <button class="btn-ghost font-impact" id="btn-read-keys" type="button">READ FROM MOUSE</button>
-                <button class="btn-ghost font-impact" id="btn-reset-keys" type="button">LOAD DEFAULTS</button>
-                <button class="btn-primary font-impact" id="btn-apply-keys" type="button">APPLY TO MOUSE</button>
+                <button class="btn-ghost" id="btn-read-keys" type="button">Read from Mouse</button>
+                <button class="btn-ghost" id="btn-reset-keys" type="button">Load Defaults</button>
+                <button class="btn-primary" id="btn-apply-keys" type="button">Apply to Mouse</button>
               </div>
             </div>
           </div>
@@ -124,12 +160,12 @@
           <!-- PERFORMANCE -->
           <div class="tab-panel" id="tab-performance">
             <div class="panel-section">
-              <div class="section-title font-impact">DPI SENSITIVITY</div>
-              <div class="section-desc">Six stages, 50 to 24000 CPI. <strong>DPI COUNT</strong>
+              <div class="section-title">Sensitivity</div>
+              <div class="section-desc">Six stages, 50 to 24000 CPI. <strong>DPI count</strong>
                 hides unused stages, and clicking a stage makes it the mouse's active stage.</div>
 
               <div class="dpi-toolbar">
-                <label class="inline-label" for="sel-dpi-count">DPI COUNT</label>
+                <label class="inline-label" for="sel-dpi-count">DPI count</label>
                 <select id="sel-dpi-count" class="select-compact">
                   <option value="1">1</option>
                   <option value="2">2</option>
@@ -149,20 +185,20 @@
               </div>
 
               <div class="section-actions">
-                <button class="btn-ghost font-impact" id="btn-reset-led" type="button">RESET INDICATOR LED</button>
+                <button class="btn-ghost" id="btn-reset-led" type="button">Reset Indicator LED</button>
               </div>
 
               <p class="section-note">The DPI indicator shows the colour of the active stage.</p>
             </div>
 
             <div class="panel-section">
-              <div class="section-title font-impact">REPORT RATE</div>
+              <div class="section-title">Report Rate</div>
               <div class="section-desc">Polling frequency. Higher is smoother, at the cost of battery.</div>
               <div class="segmented" id="rate-control">
-                <button class="seg-btn" data-rate="125" type="button">125 HZ</button>
-                <button class="seg-btn" data-rate="250" type="button">250 HZ</button>
-                <button class="seg-btn" data-rate="500" type="button">500 HZ</button>
-                <button class="seg-btn active" data-rate="1000" type="button">1000 HZ</button>
+                <button class="seg-btn" data-rate="125" type="button">125 Hz</button>
+                <button class="seg-btn" data-rate="250" type="button">250 Hz</button>
+                <button class="seg-btn" data-rate="500" type="button">500 Hz</button>
+                <button class="seg-btn active" data-rate="1000" type="button">1000 Hz</button>
               </div>
             </div>
           </div>
@@ -170,7 +206,7 @@
           <!-- POWER / SENSOR -->
           <div class="tab-panel" id="tab-power">
             <div class="panel-section">
-              <div class="section-title font-impact">POWER MANAGEMENT</div>
+              <div class="section-title">Power Management</div>
               <div class="section-desc">Sleep timer and wake behaviour for the 2.4G link.</div>
 
               <div class="form-row">
@@ -203,55 +239,55 @@
             </div>
 
             <div class="panel-section danger-zone">
-              <div class="section-title font-impact">RESTORE</div>
+              <div class="section-title">Restore</div>
               <div class="section-desc">Reset DPI, button assignments, macros and power settings to
                 the factory defaults. This cannot be undone.</div>
-              <button class="btn-ghost font-impact" id="btn-factory" type="button">RESTORE FACTORY DEFAULTS</button>
+              <button class="btn-ghost" id="btn-factory" type="button">Restore Factory Defaults</button>
             </div>
           </div>
 
           <!-- MACRO -->
           <div class="tab-panel" id="tab-macro">
             <div class="panel-section">
-              <div class="section-title font-impact">MACRO RECORDER</div>
+              <div class="section-title">Macro Recorder</div>
               <div class="section-desc">Record up to six keyboard events, add pauses, then
                 upload the sequence to one of the six buttons. The mouse plays it back on
                 its own — nothing keeps running here.</div>
 
               <div class="section-actions">
-                <button class="btn-primary font-impact" id="btn-record" type="button">RECORD</button>
-                <button class="btn-ghost font-impact" id="btn-clear-macro" type="button">CLEAR</button>
+                <button class="btn-primary" id="btn-record" type="button">Record</button>
+                <button class="btn-ghost" id="btn-clear-macro" type="button">Clear</button>
               </div>
 
               <div class="macro-toolbar">
-                <label class="inline-label" for="inp-delay">DELAY (MS)</label>
+                <label class="inline-label" for="inp-delay">Delay (ms)</label>
                 <input type="number" id="inp-delay" class="input-compact" value="100" min="1" max="31000">
-                <button class="btn-ghost font-impact small" id="btn-add-delay" type="button">ADD DELAY</button>
+                <button class="btn-ghost small" id="btn-add-delay" type="button">Add Delay</button>
               </div>
 
               <div class="macro-steps" id="macro-steps"></div>
               <div class="macro-summary" id="macro-summary">0 events</div>
 
               <div class="macro-toolbar macro-bind">
-                <label class="inline-label" for="sel-macro-key">BIND TO</label>
+                <label class="inline-label" for="sel-macro-key">Bind to</label>
                 <select id="sel-macro-key" class="select-compact"></select>
-                <label class="inline-label" for="sel-macro-mode">MODE</label>
+                <label class="inline-label" for="sel-macro-mode">Mode</label>
                 <select id="sel-macro-mode" class="select-compact">
                   <option value="once">Play once</option>
                   <option value="repeat">Repeat</option>
                   <option value="toggle">Toggle</option>
                 </select>
-                <label class="inline-label" for="inp-macro-count">TIMES</label>
+                <label class="inline-label" for="inp-macro-count">Times</label>
                 <input type="number" id="inp-macro-count" class="input-compact" value="1" min="1" max="255" disabled>
               </div>
 
               <div class="section-actions">
-                <button class="btn-primary font-impact" id="btn-upload-macro" type="button">UPLOAD TO MOUSE</button>
-                <button class="btn-ghost font-impact" id="btn-unbind-macro" type="button">RESTORE KEY BINDING</button>
+                <button class="btn-primary" id="btn-upload-macro" type="button">Upload to Mouse</button>
+                <button class="btn-ghost" id="btn-unbind-macro" type="button">Restore Key Binding</button>
               </div>
 
-              <p class="section-note"><strong>CLEAR</strong> clears the editor only.
-                <strong>RESTORE KEY BINDING</strong> removes the macro from the mouse and
+              <p class="section-note"><strong>Clear</strong> clears the editor only.
+                <strong>Restore Key Binding</strong> removes the macro from the mouse and
                 restores the button's default action.</p>
             </div>
           </div>
@@ -259,12 +295,12 @@
           <!-- PROFILES -->
           <div class="tab-panel" id="tab-profiles">
             <div class="panel-section">
-              <div class="section-title font-impact">PROFILE SLOTS</div>
+              <div class="section-title">Profiles</div>
               <div class="section-desc">Save and recall configurations stored in this browser.</div>
 
               <div class="profile-toolbar">
                 <input type="text" id="inp-profile-name" class="input-compact" placeholder="Profile name" value="Profile 1">
-                <button class="btn-primary font-impact" id="btn-save-profile" type="button">SAVE</button>
+                <button class="btn-primary" id="btn-save-profile" type="button">Save</button>
               </div>
 
               <div class="profile-list" id="profile-list"></div>
@@ -274,28 +310,28 @@
           <!-- DIAGNOSTICS -->
           <div class="tab-panel" id="tab-diagnostics">
             <div class="panel-section">
-              <div class="section-title font-impact">CONNECTION</div>
+              <div class="section-title">Connection</div>
               <div class="section-desc">The firmware only answers on one HID collection. If the
                 interface line below is red, close the vendor utility and re-pair.</div>
 
               <div class="diag-grid">
-                <div class="diag-cell"><span class="diag-label">PRODUCT</span><span id="diag-product">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Product</span><span id="diag-product">—</span></div>
                 <div class="diag-cell"><span class="diag-label">VID : PID</span><span id="diag-ids">—</span></div>
-                <div class="diag-cell"><span class="diag-label">INTERFACE</span><span id="diag-interface">—</span></div>
-                <div class="diag-cell"><span class="diag-label">INFO REPLY (0x10)</span><span id="diag-info">—</span></div>
-                <div class="diag-cell"><span class="diag-label">BATTERY / LINK</span><span id="diag-battery">—</span></div>
-                <div class="diag-cell"><span class="diag-label">LAST COMMAND</span><span id="diag-last">—</span></div>
-                <div class="diag-cell"><span class="diag-label">LAST ERROR</span><span id="diag-error">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Interface</span><span id="diag-interface">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Info reply (0x10)</span><span id="diag-info">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Battery / link</span><span id="diag-battery">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Last command</span><span id="diag-last">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Last error</span><span id="diag-error">—</span></div>
               </div>
 
-              <div class="diag-subtitle">COLLECTIONS</div>
+              <div class="diag-subtitle">Collections</div>
               <div class="diag-list" id="diag-collections"></div>
 
-              <div class="diag-subtitle">CUSTOM PAIRING</div>
+              <div class="diag-subtitle">Custom pairing</div>
               <div class="profile-toolbar">
                 <input id="inp-custom-vid" class="input-compact" placeholder="VID 248a">
                 <input id="inp-custom-pid" class="input-compact" placeholder="PID (optional)">
-                <button id="btn-pair-custom" class="btn-ghost small font-impact" type="button">PAIR</button>
+                <button id="btn-pair-custom" class="btn-ghost small" type="button">Pair</button>
               </div>
               <p class="section-note">
                 If the device reports a different vendor id than the descriptor
@@ -304,22 +340,22 @@
                 empty to match any product from that vendor.
               </p>
 
-              <div class="diag-subtitle">WIRE LOG</div>
+              <div class="diag-subtitle">Wire log</div>
               <pre class="diag-wire" id="diag-wire">—</pre>
 
               <div class="section-actions">
-                <button class="btn-ghost font-impact" id="btn-test" type="button">READ DEVICE INFO</button>
-                <button class="btn-ghost font-impact" id="btn-pair-any" type="button">TRY ANOTHER INTERFACE</button>
-                <button class="btn-ghost font-impact" id="btn-pair-scan" type="button">SCAN ANY VENDOR HID</button>
-                <button class="btn-ghost font-impact" id="btn-copy-diag" type="button">COPY DIAGNOSTICS</button>
+                <button class="btn-ghost" id="btn-test" type="button">Read Device Info</button>
+                <button class="btn-ghost" id="btn-pair-any" type="button">Try Another Interface</button>
+                <button class="btn-ghost" id="btn-pair-scan" type="button">Scan Any Vendor HID</button>
+                <button class="btn-ghost" id="btn-copy-diag" type="button">Copy Diagnostics</button>
               </div>
 
               <p class="section-note">
                 The picker lists every interface of the brand. Chrome grants one
                 interface per pairing, so if this one has no vendor usage page
                 (<code>0xFF00</code> and up), pick a different row with
-                <strong>TRY ANOTHER INTERFACE</strong>. Still nothing? Use
-                <strong>SCAN ANY VENDOR HID</strong>.
+                <strong>Try Another Interface</strong>. Still nothing? Use
+                <strong>Scan Any Vendor HID</strong>.
               </p>
 
               <p class="section-note">
