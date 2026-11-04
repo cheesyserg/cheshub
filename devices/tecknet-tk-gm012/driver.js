@@ -246,7 +246,7 @@ let sendLayout = null;   // null = unknown, 0 = 32-byte payload, 1 = 33 bytes as
 let probing = false;
 let macroSteps = [];
 let macroTarget = 5;          // visual key index; 5 = the DPI-loop key
-let macroMode = "once";      // once | repeat | toggle
+let macroMode = "once";      // once | repeat | toggle | hold
 let macroRepeat = 1;
 let recording = false;
 
@@ -498,11 +498,19 @@ async function readKeys() {
     if (visual < 0) continue;
     records[visual] = record;
     if (record[0] === 0x90) {
-      // Key binding to a macro slot. [1] = key_value | mode flag, [2] = loops.
+      // Key binding to a macro slot. [1] = key_value | loop flag, [2] = loop count.
+      // Vendor mapping (SetMouseKeyMacroData @ 0x33EA0):
+      //   0x10 = loop until the button is released ("Loops Until Stop Pressing")
+      //   0x20 = play a fixed number of times ("Loop Times", [2] = count)
+      //   0x40 = loop until any click ("Loops Until Any Click")
       state.keys[visual] = "Macro";
       const flag = record[1] & 0xF0;
-      macroMode = flag === 0x20 ? "repeat" : flag === 0x40 ? "toggle" : "once";
-      macroRepeat = record[2] || 1;
+      const loops = record[2] || 1;
+      if (flag === 0x10) macroMode = "hold";
+      else if (flag === 0x40) macroMode = "toggle";
+      else if (flag === 0x20) macroMode = loops <= 1 ? "once" : "repeat";
+      else macroMode = "once";
+      macroRepeat = loops;
       macroTarget = visual;
       continue;
     }
@@ -610,9 +618,15 @@ async function applyKeys() {
         // Another macro key read from the mouse keeps its own mode/repeat.
         record = raw.slice();
       } else {
-        // 0x90 = macro slot. [1] = key_value | mode flag, [2] = repeat count.
-        const flag = macroMode === "repeat" ? 0x20 : macroMode === "toggle" ? 0x40 : 0x10;
-        const loops = macroMode === "repeat" ? Math.max(1, Math.min(255, macroRepeat)) : 0;
+        /* 0x90 = macro slot. [1] = key_value | loop flag, [2] = loop count.
+           There is no dedicated "play once" flag in the firmware: the vendor
+           expresses it as "Loop Times" with a count of 1 (flag 0x20). Flag
+           0x10 is "loop until the button is released", which is why binding a
+           macro to 0x10 made a single click emit a long run of keystrokes. */
+        const flag = macroMode === "hold" ? 0x10 : macroMode === "toggle" ? 0x40 : 0x20;
+        const loops = flag === 0x20
+          ? Math.max(1, Math.min(255, macroMode === "once" ? 1 : macroRepeat))
+          : 0;
         record = [0x90, value | flag, loops];
       }
     } else if (KEY_RECORDS[action]) {
@@ -1161,7 +1175,7 @@ function buildProfiles() {
       if (saved.macro) {
         if (Array.isArray(saved.macro.steps)) macroSteps = saved.macro.steps;
         if (Number.isInteger(saved.macro.target) && KEYS[saved.macro.target]) macroTarget = saved.macro.target;
-        if (["once", "repeat", "toggle"].includes(saved.macro.mode)) macroMode = saved.macro.mode;
+        if (["once", "repeat", "toggle", "hold"].includes(saved.macro.mode)) macroMode = saved.macro.mode;
         if (Number.isInteger(saved.macro.repeat)) macroRepeat = saved.macro.repeat;
       }
       refreshUI();
@@ -1249,7 +1263,7 @@ function loadMacro() {
       macroSteps = raw.steps.filter((s) => s && (s.kind === "delay" || s.kind === "key"));
     }
     if (Number.isInteger(raw.target) && KEYS[raw.target]) macroTarget = raw.target;
-    if (["once", "repeat", "toggle"].includes(raw.mode)) macroMode = raw.mode;
+    if (["once", "repeat", "toggle", "hold"].includes(raw.mode)) macroMode = raw.mode;
     if (Number.isInteger(raw.repeat)) macroRepeat = raw.repeat;
   } catch (err) { /* ignore */ }
 }

@@ -429,10 +429,23 @@ record 3):
 | `0x90` | macro slot | `key_value \| mode flag`, third byte = repeat count |
 | `0x70` | keyboard | modifier + scancode (from `SetMouseKeyMacroData`, not fully decoded) |
 
-For `0x90`, the mode flag is `0x10` play once (also used by the vendor's
-“hold” type), `0x20` repeat N times, or `0x40` toggle. The count byte is only
-meaningful for repeat. Recovered from `SetMouseKeyMacroData @ 0x33EA0`; not yet
-confirmed on hardware.
+For `0x90`, the high nibble of byte 1 selects the loop mode. The mapping was
+recovered from `SetMouseKeyMacroData @ 0x33EA0` and cross-checked against the
+macro editor's three "Loops Setting" radios (`OnMacroSaveRecordDataMessage`
+stores `play_type`, which the writer turns into these flags):
+
+| Byte 1 flag | Vendor setting | Behaviour |
+|---|---|---|
+| `0x20` | Loop Times | plays byte 2 times, then stops |
+| `0x10` | Loops Until Stop Pressing | loops for as long as the button is held |
+| `0x40` | Loops Until Any Click | toggles; another click stops it |
+
+There is **no dedicated play-once flag**. The vendor's "once" is simply
+`0x20` with a count of `1`. Writing `0x10` instead makes a normal click repeat
+the macro until the button is released, which is heard as a burst of keystrokes.
+The count byte is only meaningful for `0x20`. Recovered from `0x33EA0`; the
+flag values themselves are confirmed by the register map in
+[REGISTERS.md](REGISTERS.md).
 
 The length byte is `0x0f` (15) even though 18 bytes of records follow — copied
 verbatim, since that is what the vendor sends and the device accepts.

@@ -280,14 +280,20 @@ Six 3-byte records in `key_value` order. The length byte is `0x0F` even though
 Macro binding:
 
 ```text
-90  (key_value | flag)  loops
+90  (key_value | loop flag)  count
 ```
 
-| Flag | Mode |
-|---|---|
-| `0x10` | play once |
-| `0x20` | repeat N times (`loops` = N) |
-| `0x40` | toggle |
+| Flag | Vendor setting | Behaviour |
+|---|---|---|
+| `0x20` | Loop Times | plays `count` times |
+| `0x10` | Loops Until Stop Pressing | loops while the button is held |
+| `0x40` | Loops Until Any Click | toggles on/off with each click |
+
+`count` is only used with `0x20`. A one-shot macro is `0x20` with `count = 1`;
+the firmware has no separate play-once flag. Using `0x10` for a one-shot makes
+a single click repeat the whole macro while the button is down. Recovered from
+`SetMouseKeyMacroData @ 0x33EA0` and the macro editor's loop radios
+(`OnMacroSaveRecordDataMessage`).
 
 The `0x11` reply returns the six records from `[4]`. The studio reads this on
 connect, on SYNC, and from **READ FROM MOUSE**. Unknown records are preserved
