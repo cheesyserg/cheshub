@@ -289,6 +289,7 @@
                 <div class="diag-cell"><span class="diag-label">PRODUCT</span><span id="diag-product">—</span></div>
                 <div class="diag-cell"><span class="diag-label">VID : PID</span><span id="diag-ids">—</span></div>
                 <div class="diag-cell"><span class="diag-label">INTERFACE</span><span id="diag-interface">—</span></div>
+                <div class="diag-cell"><span class="diag-label">INFO REPLY (0x10)</span><span id="diag-info">—</span></div>
                 <div class="diag-cell"><span class="diag-label">LAST COMMAND</span><span id="diag-last">—</span></div>
                 <div class="diag-cell"><span class="diag-label">LAST ERROR</span><span id="diag-error">—</span></div>
               </div>
@@ -296,8 +297,11 @@
               <div class="diag-subtitle">COLLECTIONS</div>
               <div class="diag-list" id="diag-collections"></div>
 
+              <div class="diag-subtitle">WIRE LOG</div>
+              <pre class="diag-wire" id="diag-wire">—</pre>
+
               <div class="section-actions">
-                <button class="btn-ghost font-impact" id="btn-test" type="button">SEND TEST FRAME</button>
+                <button class="btn-ghost font-impact" id="btn-test" type="button">READ DEVICE INFO</button>
                 <button class="btn-ghost font-impact" id="btn-pair-any" type="button">SHOW ALL INTERFACES</button>
               </div>
 
@@ -306,6 +310,8 @@
                 <code>usage_page</code> is <code>0xFFEF</code> and whose
                 <code>usage</code> is <code>0</code>. Picking the boot mouse or keyboard
                 collection instead makes every write disappear without an error.
+                Every connection then starts with read command <code>0x10</code>,
+                exactly like <code>DriverComm::GetDeviceInfo</code>.
               </p>
             </div>
           </div>

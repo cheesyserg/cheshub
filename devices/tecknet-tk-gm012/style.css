@@ -176,6 +176,7 @@ input[type="range"] { flex: 1; height: 5px; background: var(--riot-panel); accen
 .diag-row code { color: var(--riot-white); }
 .diag-flag { margin-left: auto; font-size: 10px; font-weight: 800; color: var(--riot-muted); }
 .diag-flag.ok { color: #00ff55; }
+.diag-wire { background: var(--riot-panel); border: 1px solid var(--riot-border); padding: 10px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 11px; line-height: 1.6; color: var(--riot-gray); max-height: 170px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
 
 #toast-container { position: fixed; bottom: 26px; right: 36px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
 .toast { background: var(--riot-panel); border-left: 4px solid var(--riot-red); color: #fff; padding: 14px 18px; font-size: 13px; font-weight: bold; box-shadow: 0 10px 30px rgba(0,0,0,0.6); animation: toastIn 0.2s ease; }

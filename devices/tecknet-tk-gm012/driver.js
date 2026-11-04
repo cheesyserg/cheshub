@@ -28,6 +28,7 @@ const FILTERS = [
 const FILTERS_ANY = [WIRED, WIRELESS];
 
 const CMD = {
+  INFO: 0x10,
   RATE: 0x02,
   DPI: 0x03,
   DPI_COLOR: 0x04,
@@ -93,10 +94,12 @@ const DEFAULT_STAGE = 1;
 
 let state = structuredClone(DEFAULTS);
 let hidDevice = null;
+let deviceInfo = null;
 let pending = null;
 let lastWriteError = "";
 let lastResult = "—";
 let selectedStage = DEFAULT_STAGE;
+let outputReportId = 0;
 let macroSteps = [];
 let recording = false;
 
@@ -110,32 +113,62 @@ function checksum(bytes) {
   return sum & 0xFF;
 }
 
-function buildReport(cmd, payload, lenByte) {
+/* Build a 64-byte report with the report id stripped. The vendor writes
+   `00 <cmd> 00 <rw> <len> ...` and lets hidapi keep the leading 0x00 as the
+   report id; WebHID wants the id passed separately, so [0] is dropped here.
+   Byte 3 is 0x01 for writes and 0x00 for reads. */
+function buildReport(cmd, payload, lenByte, isWrite) {
   const frame = new Uint8Array(65);
   frame[0] = 0x00;
   frame[1] = cmd;
   frame[2] = 0x00;
-  frame[3] = 0x01;
+  frame[3] = isWrite === false ? 0x00 : 0x01;
   frame[4] = lenByte === undefined ? payload.length : lenByte;
   for (let i = 0; i < payload.length && i < 27; i++) frame[5 + i] = payload[i] & 0xFF;
   frame[32] = checksum(frame);
-  return frame.slice(1);           // 64-byte report, report id 0
+  return frame.slice(1);
 }
 
 function delay(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
-function writeAndWait(report, timeoutMs) {
+function hexOf(bytes, limit) {
+  return Array.from(bytes.slice(0, limit))
+    .map((b) => b.toString(16).padStart(2, "0")).join(" ");
+}
+
+/* Last few packets, so a failed session can be reported verbatim. */
+const wireLog = [];
+
+function logWire(dir, bytes) {
+  wireLog.push(`${dir} ${hexOf(bytes, 16)}`);
+  if (wireLog.length > 12) wireLog.shift();
+  const el = document.getElementById("diag-wire");
+  if (el) el.textContent = wireLog.length ? wireLog.join("\n") : "—";
+}
+
+/* One write, then wait for an input report. `wide` sends the full 65-byte
+   frame instead of the 64-byte payload, which covers units whose descriptor
+   carries no report id. */
+function exchange(report, wide, timeoutMs) {
   return new Promise(async (resolve) => {
     let timer = null;
-    const settle = (data) => {
+    const settle = (reply) => {
       clearTimeout(timer);
       if (pending === settle) pending = null;
-      resolve(data);
+      resolve(reply);
     };
     pending = settle;
     timer = setTimeout(() => settle(null), timeoutMs);
+
+    let data = report;
+    if (wide) {
+      data = new Uint8Array(65);
+      data[0] = 0x00;
+      data.set(report, 1);
+    }
+    logWire("TX", data);
     try {
-      await hidDevice.sendReport(0, report);
+      await hidDevice.sendReport(outputReportId, data);
     } catch (err) {
       lastWriteError = err && err.message ? err.message : String(err);
       settle(null);
@@ -143,33 +176,49 @@ function writeAndWait(report, timeoutMs) {
   });
 }
 
-/* Write, wait, retry once — mirroring DriverComm::SetDeviceData. Some units
-   accept a write without ever answering; that is reported as "sent, no ack"
-   rather than as a failure. */
+/* DriverComm::SetDeviceData writes, then reads up to 50 times at 30 ms and
+   only accepts a reply whose second byte is 0 (hidapi keeps the report id at
+   [0], WebHID strips it). So the wait has to be long: a 2.4G dongle can take
+   a while. Each variant is tried once before moving on. */
+const ATTEMPTS = [
+  { wide: false, timeout: 400 },
+  { wide: true, timeout: 400 },
+  { wide: false, timeout: 1200 }
+];
+
 async function sendCommand(cmd, payload, lenByte, opts = {}) {
-  const timeoutMs = opts.timeoutMs || 120;
-  const attempts = opts.attempts || 2;
   if (!hidDevice || !hidDevice.opened) {
     lastResult = "not connected";
     return { ok: false, error: "not connected" };
   }
-  const report = buildReport(cmd, payload, lenByte);
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const reply = await writeAndWait(report, timeoutMs);
-    if (reply) {
-      const head = Array.from(reply.slice(0, 8))
-        .map((b) => b.toString(16).padStart(2, "0")).join(" ");
-      lastResult = `0x${cmd.toString(16)} → ${reply.length} B [${head}]`;
-      return { ok: true, reply };
+  const report = buildReport(cmd, payload, lenByte, opts.isWrite !== false);
+  let lastErr = "";
+
+  for (const attempt of ATTEMPTS) {
+    lastWriteError = "";
+    const reply = await exchange(report, attempt.wide, attempt.timeout);
+    if (reply && reply.length) {
+      // vendor check: reply[1] == 0 in hidapi terms, reply[0] after WebHID strips the id
+      const ack = reply[0] === 0 || (reply.length > 1 && reply[1] === 0);
+      lastResult = `0x${cmd.toString(16)} <- ${reply.length} B [${hexOf(reply, 16)}]${ack ? "" : " (odd ack)"}`;
+      return { ok: true, reply, ack };
     }
-    if (lastWriteError) {
-      lastResult = `cmd 0x${cmd.toString(16)} → write error`;
-      return { ok: false, error: lastWriteError };
-    }
-    if (attempt + 1 < attempts) await delay(10);
+    if (lastWriteError) lastErr = lastWriteError;
   }
-  lastResult = `cmd 0x${cmd.toString(16)} → no ack`;
+
+  if (lastErr) {
+    lastResult = `0x${cmd.toString(16)} -> write error`;
+    return { ok: false, error: lastErr };
+  }
+  lastResult = `0x${cmd.toString(16)} -> no ack`;
   return { ok: true, silent: true };
+}
+
+/* DriverComm::GetDeviceInfo @ 0x4B200 and the open path in EnumerateDevice:
+   every connection starts with a read of command 0x10. Doing the same both
+   wakes the dongle and proves the link before any write is attempted. */
+async function readDeviceInfo() {
+  return sendCommand(CMD.INFO, [], 0, { isWrite: false });
 }
 
 /* -------------------------------------------------------------------- apply */
@@ -230,6 +279,7 @@ async function restoreFactory() {
 async function applyAll() {
   if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
   setBusy(true);
+  await readDeviceInfo();          // wake the link the way the vendor does
   const results = [];
   results.push(await applyRate()); await delay(40);
   results.push(await applyDpi()); await delay(40);
@@ -281,19 +331,41 @@ async function attach(device, announce) {
     }
   }
   hidDevice.oninputreport = (event) => {
-    if (pending) pending(new Uint8Array(event.data.buffer));
+    const bytes = new Uint8Array(event.data.buffer);
+    logWire("RX", bytes);
+    if (pending) pending(bytes);
   };
+  outputReportId = pickReportId(device);
+
+  // Same open sequence as DriverComm::EnumerateDevice: read command 0x10.
+  const probe = await readDeviceInfo();
+  deviceInfo = probe.reply || null;
+
   updateHud();
   updateDiagnostics();
   if (announce) {
-    if (isVendorCollection(device)) showToast("Connected to TK-GM012");
-    else showToast("Wrong interface — see DIAGNOSTICS");
+    if (!isVendorCollection(device)) showToast("Wrong interface — see DIAGNOSTICS");
+    else if (probe.reply) showToast(`Connected — device answered (${probe.reply.length} B)`);
+    else if (probe.error) showToast(`Connected — ${probe.error}`);
+    else showToast("Connected — no reply, check DIAGNOSTICS");
   }
 }
 
 function isVendorCollection(device) {
   return (device.collections || []).some(
     (c) => c.usagePage === VENDOR_USAGE_PAGE && c.usage === VENDOR_USAGE);
+}
+
+/* The vendor always writes report id 0. If a unit's descriptor does not
+   declare it, fall back to whatever output report it does expose. */
+function pickReportId(device) {
+  const ids = [];
+  for (const c of device.collections || []) {
+    for (const r of c.outputReports || []) ids.push(r.reportId);
+  }
+  const unique = [...new Set(ids)];
+  if (unique.includes(0)) return 0;
+  return unique.length ? unique[0] : 0;
 }
 
 async function autoConnect() {
@@ -345,6 +417,7 @@ function updateDiagnostics() {
     set("diag-product", "not connected");
     set("diag-ids", "—");
     set("diag-interface", "—");
+    set("diag-info", "—");
     set("diag-last", lastResult);
     set("diag-error", lastWriteError || "—");
     const list = $("diag-collections");
@@ -356,9 +429,11 @@ function updateDiagnostics() {
   set("diag-product", hidDevice.productName || "(unnamed)");
   set("diag-ids", `0x${hidDevice.vendorId.toString(16).toUpperCase()} : 0x${hidDevice.productId.toString(16).toUpperCase()}`);
   set("diag-interface",
-      vendor ? `0x${VENDOR_USAGE_PAGE.toString(16).toUpperCase()} / 0x00 vendor collection`
+      vendor ? `0x${VENDOR_USAGE_PAGE.toString(16).toUpperCase()} / 0x00 vendor collection · report id ${outputReportId}`
              : "wrong collection — re-pair",
       vendor ? "ok" : "bad");
+  set("diag-info", deviceInfo ? `${deviceInfo.length} B [${hexOf(deviceInfo, 16)}]` : "no reply",
+      deviceInfo ? "ok" : "bad");
   set("diag-last", lastResult);
   set("diag-error", lastWriteError || "—", lastWriteError ? "bad" : "");
 
@@ -661,11 +736,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("btn-test")?.addEventListener("click", async () => {
     if (!hidDevice || !hidDevice.opened) return showToast("Connect the mouse first");
-    const res = await applyRate();
+    const res = await readDeviceInfo();
+    deviceInfo = res.reply || deviceInfo;
     updateDiagnostics();
-    showToast(res.ok
-      ? (res.silent ? "Written — no reply from device" : "Device answered")
-      : (res.error || "Write failed"));
+    showToast(res.reply
+      ? `Device answered: ${res.reply.length} B`
+      : res.error ? res.error : "No reply");
   });
 
   document.querySelectorAll("#rate-control .seg-btn").forEach((btn) => {

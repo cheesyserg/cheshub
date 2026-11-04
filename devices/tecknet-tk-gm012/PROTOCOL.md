@@ -71,6 +71,82 @@ The checksum loop is nine unrolled iterations adding three bytes each, i.e.
 exactly bytes `5..31`, stored to `buf[0x20]`. That caps the checksummed payload
 at 27 bytes; every command below fits.
 
+## Link startup and acknowledgement
+
+Three details of the vendor I/O path matter when reimplementing it.
+
+**Writes are padded, not truncated.** `_hid_write @ 0x4D580` compares the
+requested length against `dev->output_report_length` and zero-pads when the
+caller passes less:
+
+```c
+if (len < output_report_length) {
+    buf = malloc(output_report_length);
+    memcpy(buf, data, len);
+    memset(buf + len, 0, output_report_length - len);
+    len = output_report_length;
+}
+WriteFile(handle, buf, len, &written, NULL);
+```
+
+The tool writes 65 bytes for a configuration packet (report id `0x00` followed
+by a 64-byte report) and 33 bytes for a read. Since lengths above the report
+size are passed through untouched, the output report is 65 bytes: one id byte
+plus 64.
+
+**A reply only counts when byte 1 is zero.** `DriverComm::SetDeviceData @ 0x4B300`:
+
+```c
+sum = checksum(buf[5..31]); buf[32] = sum;
+tmp = malloc(len); memcpy(tmp, buf, len);
+if (hid_write(dev, tmp, len) > 0) {
+    for (i = 0; i < 50; i++) {                    /* 50 x 30 ms = 1.5 s */
+        n = hid_read_timeout(dev, tmp, len, 30);
+        if (n > 0 && tmp[1] == 0) { ok = true; break; }
+    }
+    memcpy(buf, tmp, len);                        /* reply lands in the caller's buffer */
+}
+```
+
+So the wait budget is up to 1.5 s per packet, and replies whose second byte is
+non-zero are discarded while the read is retried. `hidapi` keeps the report id
+at index 0, so `tmp[1]` is the first byte after the id; WebHID strips the id,
+which makes the equivalent check `reply[0] === 0`.
+
+**Every connection starts with a read.** `DriverComm::GetDeviceInfo @ 0x4B200`
+builds `00 10 00 00`, computes the checksum itself, writes 33 bytes and reads
+33 back. `EnumerateDevice` calls it immediately after opening the interface
+(0x4BB8F and 0x4BBB0), and `GetDeviceNotify` reuses it as a poll. That is the
+handshake: command `0x10`, read direction, no payload. A client that skips it
+is talking to a link that has not been woken yet.
+
+Read frames differ from writes in byte 3: `0x00` for a read, `0x01` for a write.
+Byte 4 is the payload length, `0` on reads.
+
+### Read commands
+
+| Cmd | Emitted by | Contents |
+|---|---|---|
+| `0x10` | `GetDeviceInfo`, `GetDeviceNotify` | battery, firmware, link state |
+| `0x11` | `GetMouseData` | not decoded |
+| `0x12` | `GetMouseData` | report rate at `[4]`, printed as `%d` |
+| `0x13` | `GetMouseData` | not decoded |
+
+The `0x10` reply is parsed from `0x31C85` onward. Offsets below are into the
+`hidapi` buffer, which includes the report id at `[0]`; subtract one for WebHID:
+
+| Offset | Meaning |
+|---|---|
+| 7..8 | 16-bit value, little endian — probably firmware version |
+| 10 | device type, compared against `0x11` |
+| 11 | rate code, compared against `0x10` / `0x20` / `0x40` |
+| 12 | battery level |
+| 13 | charging state |
+| 14 | link state; `0` takes the "not connected" branch |
+
+The battery scaling was not confirmed, so the studio shows the raw reply in
+DIAGNOSTICS rather than inventing a percentage.
+
 ## Feature set from the device descriptor
 
 `device/mouse_tk-gm012.xml` is the vendor's own description of what this unit

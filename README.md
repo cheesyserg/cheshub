@@ -153,6 +153,18 @@ The vendor utility is probably holding the handle. Quit it completely (tray
 icon included) and reload. On Linux, check `lsusb` and that nothing like
 `libratbag` grabbed the device.
 
+**The page still shows an old error message**
+GitHub Pages caches aggressively. Hard-reload with `Ctrl+Shift+R` (or
+`Cmd+Shift+R`). If the DIAGNOSTICS tab is missing, you are looking at a stale
+build — the current studio always has it.
+
+**The device is connected but every command times out**
+Open DIAGNOSTICS. `INFO REPLY (0x10)` should show bytes after connecting, since
+every session starts with that read. If it says `no reply` while `INTERFACE` is
+red, you are on the wrong HID collection; re-pair. If it says `no reply` while
+`INTERFACE` is green, the wire log shows exactly what was sent — attach it to a
+bug report.
+
 **The prompt shows the device but writes fail**
 Devices expose several HID collections. The controllable one is normally the
 vendor collection (`MI_02`, usage page `0xFF00`–`0xFFFF`) rather than the
