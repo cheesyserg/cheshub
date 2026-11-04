@@ -64,7 +64,8 @@ const CMD = {
   DPI_READ: 0x13,
   DPI_COLOR_READ: 0x14,
   SENSOR_READ: 0x16,
-  POWER_READ: 0x17
+  POWER_READ: 0x17,
+  FIRMWARE: 0x20
 };
 
 const RATE_CODES = { 1000: 1, 500: 2, 250: 4, 125: 8 };
@@ -161,6 +162,7 @@ let deviceInfo = null;
 let batteryLevel = null;
 let charging = false;
 let linkState = null;
+let fwVersion = null;
 let pollTimer = null;
 let pending = null;
 let lastWriteError = "";
@@ -389,6 +391,19 @@ async function readPower() {
   return true;
 }
 
+/* Command 0x20 returns the mouse firmware. The vendor formats '%X%02X' over
+   bytes 4 and 5, then shows the first character as the major and the last two
+   as the minor: 0x26 0x03 -> "2603" -> 2.03. The dongle's own version is not
+   in the protocol at all — it is the USB bcdDevice (1.83 reads as 0x0183). */
+async function readFirmware() {
+  const res = await sendCommand(CMD.FIRMWARE, [], 0, { isWrite: false });
+  if (!res.reply || res.reply.length < 6) return false;
+  const s = res.reply[4].toString(16).toUpperCase() +
+            res.reply[5].toString(16).padStart(2, "0").toUpperCase();
+  fwVersion = `${s.slice(0, 1)}.${s.slice(-2)}`;
+  return true;
+}
+
 /* Pull the whole configuration back off the device. */
 async function syncFromDevice() {
   if (!hidDevice || !hidDevice.opened) return false;
@@ -398,7 +413,9 @@ async function syncFromDevice() {
   await readDpi();
   await readDpiColors();
   await readPower();
+  await readFirmware();
   refreshUI();
+  updateHud();
   updateDiagnostics();
   saveState();
   return true;
@@ -745,6 +762,9 @@ function updateHud() {
     bar.style.width = pct === null ? "0%" : `${pct}%`;
     bar.style.background = pct !== null && pct <= 20 ? "#ff4655" : "";
   }
+
+  const fw = $("header-fw");
+  if (fw) fw.textContent = `FW: ${online && fwVersion ? fwVersion : "--"}`;
 }
 
 function updateDiagnostics() {
@@ -1042,6 +1062,7 @@ document.addEventListener("DOMContentLoaded", () => {
     deviceInfo = null;
     batteryLevel = null;
     charging = false;
+    fwVersion = null;
     stopPolling();
     updateHud();
     updateDiagnostics();

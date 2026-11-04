@@ -448,7 +448,7 @@ them, but the command is what selects a read:
 | `0x15` | `0x05` | 24 B | lighting (unused on this model) |
 | `0x16` | `0x06` | 5 B | sensor/LOD (not exposed on this model) |
 | `0x17` | `0x07` | 5 B | `[sleep][0][wake][closelight][0]` |
-| `0x20` | — | 2 B | undecoded, returns `26 03` |
+| `0x20` | — | 2 B | mouse firmware, see below |
 
 Two of these confirm earlier guesses. `0x17` returns `1e 00 01 00 00` —
 sleep 30, wake on, closelight off — matching the 4-byte write of `0x07`. And
@@ -463,6 +463,22 @@ sleep 30, wake on, closelight off — matching the 4-byte write of `0x07`. And
 `10 01 00 / 10 02 00 / 10 04 00 / 10 08 00 / 10 10 00 / 40 01 00`, i.e. left,
 right, middle, back, forward, DPI loop — and record 3 is Backward / record 4 is
 Forward, exactly as `key_value` dictates.
+
+### `0x20` — mouse firmware
+
+`GetMouseData` formats bytes 4 and 5 with `%X%02X`, then shows the first
+character as the major version and the last two as the minor, under language id
+**551 = "Mouse Firmware"**:
+
+```text
+20 00 01 02 26 03  ->  "2603"  ->  2.03
+20 00 01 02 01 83  ->  "183"   ->  1.83
+```
+
+The **dongle** version is not in the protocol at all. `v1.83` is the USB
+device descriptor's `bcdDevice` (`0x0183`) — `hid_probe.py` prints it, but
+WebHID does not expose it, so the browser studio can only show the mouse
+firmware.
 
 The studio runs this same sweep on connect and on **SYNC**, so the UI reflects
 the mouse rather than the stored profile.

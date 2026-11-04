@@ -89,9 +89,12 @@ def list_interfaces():
     print(f"{'':2} {'interface':>9}  {'usage page':>10}  {'usage':>7}  product")
     for entry in entries:
         mark = "*" if is_vendor(entry) else " "
+        release = entry["release_number"]
         print(f"{mark:2} {entry['interface_number']:>9}  "
               f"0x{entry['usage_page']:04X}{'':>8}  0x{entry['usage']:04X}   "
               f"{entry['product_string']}")
+        print(f"   vid:pid {entry['vendor_id']:04X}:{entry['product_id']:04X}   "
+              f"bcdDevice 0x{release:04X} (v{release >> 8:X}.{release & 0xFF:02X})")
         print(f"   path: {entry['path']}")
     print("\n* marks the collection the protocol runs on")
     return entries
