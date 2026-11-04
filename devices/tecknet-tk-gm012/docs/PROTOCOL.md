@@ -492,6 +492,10 @@ trailing pause. `1` is the firmware's minimum. Modifier bits from
 `0x10`, right ctrl `0x04`, left alt `0x40`, right alt `0x80`, left win `0x08`,
 right win `0x02`.
 
+The studio exposes the same four event kinds through its Insert menu (keyboard
+down/up and mouse down/up); a mouse record's parameter byte is the button bit
+from the table above.
+
 Verified capture of a macro bound to the DPI-loop key (`key_value 5`) that
 presses and releases A with a 78 ms gap, followed by the `0x09` binding:
 

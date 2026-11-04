@@ -167,8 +167,63 @@ const KEY_RECORDS = {
    trailing pause. Delay 1 ms is the vendor's minimum. */
 const MACRO_ACTIONS = {
   keyboardDown: 0x30, keyboardUp: 0xB0,
-  modifierDown: 0x20, modifierUp: 0xA0
+  modifierDown: 0x20, modifierUp: 0xA0,
+  mouseDown: 0x10, mouseUp: 0x90
 };
+
+/* Mouse button bits for macro records (parameter byte). Same encoding the
+   vendor's Insert Event menu uses for Mouse Down / Mouse Up. */
+const MACRO_MOUSE_BUTTONS = {
+  Left:    { bit: 0x01, label: "Left button" },
+  Right:   { bit: 0x02, label: "Right button" },
+  Middle:  { bit: 0x04, label: "Middle button" },
+  Back:    { bit: 0x08, label: "Back button" },
+  Forward: { bit: 0x10, label: "Forward button" }
+};
+
+/* Insert-menu order for manual events. Every code exists in HID_USAGE or
+   MODIFIER_BITS, so buildMacroRecords can always encode it. */
+const MACRO_INSERT_KEYS = (() => {
+  const out = [];
+  const add = (value, label) => out.push({ value, label });
+  for (let i = 0; i < 26; i++) add(`Key${String.fromCharCode(65 + i)}`, String.fromCharCode(65 + i));
+  for (let i = 1; i <= 9; i++) add(`Digit${i}`, String(i));
+  add("Digit0", "0");
+  for (let i = 1; i <= 12; i++) add(`F${i}`, `F${i}`);
+  add("Escape", "Esc"); add("Tab", "Tab"); add("CapsLock", "Caps Lock");
+  add("ShiftLeft", "Left Shift"); add("ShiftRight", "Right Shift");
+  add("ControlLeft", "Left Ctrl"); add("ControlRight", "Right Ctrl");
+  add("AltLeft", "Left Alt"); add("AltRight", "Right Alt");
+  add("MetaLeft", "Left Win"); add("MetaRight", "Right Win");
+  add("Space", "Space"); add("Enter", "Enter"); add("Backspace", "Backspace");
+  add("Delete", "Delete"); add("Insert", "Insert"); add("Home", "Home"); add("End", "End");
+  add("PageUp", "Page Up"); add("PageDown", "Page Down");
+  add("ArrowUp", "Up"); add("ArrowDown", "Down");
+  add("ArrowLeft", "Left"); add("ArrowRight", "Right");
+  add("PrintScreen", "Print Screen"); add("ScrollLock", "Scroll Lock"); add("Pause", "Pause");
+  add("ContextMenu", "Menu");
+  add("Minus", "-"); add("Equal", "="); add("BracketLeft", "["); add("BracketRight", "]");
+  add("Backslash", "\\"); add("Semicolon", ";"); add("Quote", "'");
+  add("Backquote", "`"); add("Comma", ","); add("Period", "."); add("Slash", "/");
+  add("IntlBackslash", "Intl \\");
+  add("NumLock", "Num Lock"); add("NumpadDivide", "Num /"); add("NumpadMultiply", "Num *");
+  add("NumpadSubtract", "Num -"); add("NumpadAdd", "Num +"); add("NumpadEnter", "Num Enter");
+  add("NumpadDecimal", "Num ."); add("NumpadEqual", "Num =");
+  for (let i = 1; i <= 9; i++) add(`Numpad${i}`, `Num ${i}`);
+  add("Numpad0", "Num 0");
+  return out;
+})();
+
+const MACRO_KEY_LABELS = Object.fromEntries(MACRO_INSERT_KEYS.map((k) => [k.value, k.label]));
+
+function isMouseStep(step) {
+  return step.source === "mouse" || (step.source === undefined && MACRO_MOUSE_BUTTONS[step.key] !== undefined);
+}
+
+function macroStepLabel(step) {
+  if (isMouseStep(step)) return (MACRO_MOUSE_BUTTONS[step.key] || {}).label || step.key;
+  return MACRO_KEY_LABELS[step.key] || step.key;
+}
 
 /* KeyboardEvent.code -> USB HID keyboard usage, the values
    ProtocolData::GetFlashKeyCode @ 0x4D7A0 returns for Windows VKs. */
@@ -1123,7 +1178,7 @@ function buildMacroList() {
           <span class="macro-index">${i + 1}</span>
           <span class="macro-body">${step.kind === "delay"
             ? `Delay ${step.ms} ms`
-            : `${step.type === "down" ? "Press" : "Release"} ${step.key}`}</span>
+            : `${step.type === "down" ? "Press" : "Release"} ${macroStepLabel(step)}`}</span>
           <button class="macro-del" data-i="${i}" type="button">×</button>
         </div>`).join("")
     : `<div class="macro-empty">No steps recorded</div>`;
@@ -1351,10 +1406,24 @@ function buildMacroRecords() {
       continue;
     }
 
-    const modifier = MODIFIER_BITS[step.key];
-    const usage = HID_USAGE[step.key];
-    if (modifier === undefined && usage === undefined) {
-      return { error: `"${step.key}" has no HID usage mapping` };
+    const down = step.type === "down";
+    let cls, param;
+
+    if (isMouseStep(step)) {
+      const button = MACRO_MOUSE_BUTTONS[step.key];
+      if (!button) return { error: `Unknown mouse button "${step.key}"` };
+      cls = down ? MACRO_ACTIONS.mouseDown : MACRO_ACTIONS.mouseUp;
+      param = button.bit;
+    } else {
+      const modifier = MODIFIER_BITS[step.key];
+      const usage = HID_USAGE[step.key];
+      if (modifier === undefined && usage === undefined) {
+        return { error: `"${step.key}" has no HID usage mapping` };
+      }
+      cls = modifier !== undefined
+        ? (down ? MACRO_ACTIONS.modifierDown : MACRO_ACTIONS.modifierUp)
+        : (down ? MACRO_ACTIONS.keyboardDown : MACRO_ACTIONS.keyboardUp);
+      param = modifier !== undefined ? modifier : usage;
     }
 
     if (events.length) {
@@ -1367,10 +1436,7 @@ function buildMacroRecords() {
     }
     gap = 0;
 
-    const down = step.type === "down";
-    events.push(modifier !== undefined
-      ? [down ? MACRO_ACTIONS.modifierDown : MACRO_ACTIONS.modifierUp, 1, 0, modifier]
-      : [down ? MACRO_ACTIONS.keyboardDown : MACRO_ACTIONS.keyboardUp, 1, 0, usage]);
+    events.push([cls, 1, 0, param]);
 
     if (events.length > MACRO_MAX_EVENTS) {
       return { error: `Macro is limited to ${MACRO_MAX_EVENTS} events in this studio` };
@@ -1387,6 +1453,35 @@ function buildMacroRecords() {
   }
 
   return { records: events, droppedLeadDelay };
+}
+
+/* Manual event insertion, mirroring the vendor's Insert Event menu: keyboard
+   down/up and mouse down/up, including modifiers. */
+function buildMacroInsertKeys() {
+  const select = $("sel-insert-key");
+  if (!select) return;
+  const mode = $("sel-insert-type")?.value || "keyboard-down";
+  const previous = select.value;
+  const options = mode.startsWith("mouse-")
+    ? Object.entries(MACRO_MOUSE_BUTTONS).map(([value, button]) => ({ value, label: button.label }))
+    : MACRO_INSERT_KEYS;
+  select.innerHTML = options
+    .map((option) => `<option value="${option.value}">${option.label}</option>`).join("");
+  if (options.some((option) => option.value === previous)) select.value = previous;
+}
+
+function insertMacroStep() {
+  const mode = $("sel-insert-type")?.value || "keyboard-down";
+  const value = $("sel-insert-key")?.value;
+  if (!value) return showToast("Choose a key or button to insert");
+  macroSteps.push({
+    kind: "key",
+    source: mode.startsWith("mouse-") ? "mouse" : "keyboard",
+    type: mode.endsWith("-down") ? "down" : "up",
+    key: value
+  });
+  buildMacroList();
+  saveMacro();
 }
 
 async function uploadMacro() {
@@ -1507,6 +1602,7 @@ function macroKeyHook(event) {
 
   macroSteps.push({
     kind: "key",
+    source: "keyboard",
     type: event.type === "keydown" ? "down" : "up",
     key: event.code || "KeyA"
   });
@@ -1521,6 +1617,7 @@ document.addEventListener("DOMContentLoaded", () => {
   restoreState();
   loadMacro();
   refreshUI();
+  buildMacroInsertKeys();
   updateHud();
   updateDiagnostics();
   autoConnect();
@@ -1744,6 +1841,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   $("btn-upload-macro")?.addEventListener("click", uploadMacro);
   $("btn-unbind-macro")?.addEventListener("click", unbindMacro);
+
+  $("btn-insert-step")?.addEventListener("click", insertMacroStep);
+  $("sel-insert-type")?.addEventListener("change", buildMacroInsertKeys);
 
   $("btn-add-delay")?.addEventListener("click", () => {
     const ms = Math.max(1, Math.min(31000, Math.round(Number($("inp-delay")?.value) || 100)));

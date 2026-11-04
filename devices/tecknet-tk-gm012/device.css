@@ -104,6 +104,8 @@
 /* ----------------------------------------------------------------- macros */
 
 .macro-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0; }
+.macro-insert { margin-bottom: 6px; }
+.macro-insert #sel-insert-key { min-width: 150px; }
 .macro-bind { padding-top: 2px; }
 .macro-bind .select-compact { min-width: 140px; }
 .macro-bind .input-compact { width: 80px; }

@@ -248,15 +248,27 @@
           <!-- MACRO -->
           <div class="tab-panel" id="tab-macro">
             <div class="panel-section">
-              <div class="section-title">Macro Recorder</div>
-              <div class="section-desc">Record up to six keyboard events — the pauses
-                between them are captured automatically — then upload the sequence to one
-                of the six buttons. The mouse plays it back on its own: nothing keeps
-                running here.</div>
+              <div class="section-title">Macro Editor</div>
+              <div class="section-desc">Record up to six events — or insert
+                keyboard and mouse-button events by hand. Pauses between recorded
+                events are captured automatically. The mouse plays the sequence back
+                on its own: nothing keeps running here.</div>
 
               <div class="section-actions">
                 <button class="btn-primary" id="btn-record" type="button">Record</button>
                 <button class="btn-ghost" id="btn-clear-macro" type="button">Clear</button>
+              </div>
+
+              <div class="macro-toolbar macro-insert">
+                <label class="inline-label" for="sel-insert-type">Insert</label>
+                <select id="sel-insert-type" class="select-compact">
+                  <option value="keyboard-down">Keyboard down</option>
+                  <option value="keyboard-up">Keyboard up</option>
+                  <option value="mouse-down">Mouse down</option>
+                  <option value="mouse-up">Mouse up</option>
+                </select>
+                <select id="sel-insert-key" class="select-compact" aria-label="Key or button"></select>
+                <button class="btn-ghost small" id="btn-insert-step" type="button">Insert</button>
               </div>
 
               <div class="macro-toolbar">
