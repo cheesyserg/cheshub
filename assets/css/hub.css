@@ -89,7 +89,7 @@ body { min-height: 100vh; }
   border-radius: 8px;
   overflow: hidden;
   background:
-    radial-gradient(60% 70% at 50% 40%, rgba(47, 159, 221, 0.16), transparent 72%),
+    radial-gradient(60% 70% at 50% 40%, var(--accent-soft), transparent 72%),
     rgba(255, 255, 255, 0.03);
 }
 
@@ -140,9 +140,26 @@ body { min-height: 100vh; }
 
 .hub-more { display: flex; justify-content: center; margin-top: 18px; }
 
+.hub-loading {
+  width: min(360px, 100%);
+  min-height: 356px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 .empty-state {
   width: 100%;
+  min-height: 356px;
   padding: 64px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-lg);
   color: var(--text-muted);
@@ -227,4 +244,6 @@ body { min-height: 100vh; }
   .device-card { width: 100%; }
   .device-art { height: 230px; }
   .device-art img { max-height: 212px; }
+  .hub-loading { min-height: 300px; }
+  .empty-state { min-height: 300px; }
 }

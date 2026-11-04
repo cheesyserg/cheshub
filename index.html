@@ -8,6 +8,7 @@
   <title>ChesHub | Peripheral Hub</title>
   <link rel="stylesheet" href="assets/css/base.css">
   <link rel="stylesheet" href="assets/css/hub.css">
+  <script src="assets/js/theme.js"></script>
 </head>
 <body>
 
@@ -28,12 +29,17 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" data-open-appearance type="button" title="Appearance" aria-label="Appearance">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1"/><circle cx="15" cy="10" r="1"/><path d="M12 21a3 3 0 010-6 3 3 0 003-3"/></svg>
+        </button>
         <button class="btn-ghost" id="btn-scan-vendor" type="button">Scan Vendor HID</button>
         <button class="btn-primary" id="btn-scan" type="button">Pair Device</button>
       </div>
     </header>
 
-    <div class="devices-grid" id="devices-grid"></div>
+    <div class="devices-grid" id="devices-grid">
+      <div class="hub-loading">Checking paired devices…</div>
+    </div>
     <div class="hub-more" id="hub-more"></div>
     <pre class="scan-result" id="scan-result" hidden></pre>
   </div>
@@ -41,7 +47,6 @@
   <div id="toast-container"></div>
 
   <script src="assets/js/devices.js"></script>
-  <script src="assets/js/theme.js"></script>
 
   <script src="assets/js/hub.js"></script>
 </body>

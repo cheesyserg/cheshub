@@ -65,7 +65,7 @@
 .dpi-card.active { border-color: var(--accent); }
 .dpi-card.inactive { opacity: 0.42; }
 .dpi-card.inactive.active { opacity: 0.75; }
-.dpi-card.live { background: rgba(47, 159, 221, 0.07); }
+.dpi-card.live { background: var(--accent-soft); }
 
 .dpi-card-head {
   display: flex;
@@ -243,38 +243,6 @@
   line-height: 1.6;
   color: var(--text-dim);
   white-space: pre-wrap;
-}
-
-.wallpaper-actions { display: flex; flex-wrap: wrap; gap: 10px; }
-
-.wallpaper-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.wallpaper-swatch {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 7px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.18s ease, color 0.18s ease;
-}
-.wallpaper-swatch:hover { border-color: var(--border-strong); }
-.wallpaper-swatch.active { border-color: var(--accent); color: var(--text); }
-
-.wallpaper-preview {
-  height: 38px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, var(--wp-a), var(--wp-b) 55%, var(--wp-c));
 }
 
 /* ------------------------------------------------------------ responsive */

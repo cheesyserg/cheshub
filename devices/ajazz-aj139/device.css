@@ -114,7 +114,7 @@
   transition: border-color 0.18s ease, background 0.18s ease;
 }
 .rgb-card:hover { background: var(--surface-3); border-color: var(--border-strong); }
-.rgb-card.active { border-color: var(--accent); background: rgba(47, 159, 221, 0.07); }
+.rgb-card.active { border-color: var(--accent); background: var(--accent-soft); }
 
 .rgb-preview { height: 5px; width: 100%; border-radius: 2px; }
 .rgb-name { font-size: 14px; font-weight: 600; color: var(--text); }

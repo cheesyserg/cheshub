@@ -34,8 +34,10 @@ USB (`248A:5D2E`) and 2.4 GHz (`249A:5C2F`) modes.
 - Macro recorder with keyboard/modifier events (up to six), per-key upload and
   once / repeat / toggle playback
 - Named profile slots, factory restore
-- Frosted-glass studio with five animated background palettes and a custom
-  wallpaper, stored in the browser only
+- Frosted-glass studio with six accent palettes, five animated background
+  palettes and a custom wallpaper, stored in the browser only. Accent and
+  background are shared by the hub and every studio; open the palette button
+  on the hub or **Appearance** in a studio.
 
 Which features exist at all is defined by the vendor's own
 `device/mouse_tk-gm012.xml`, not by guesswork: `<menu light="0"/>` means there
@@ -106,6 +108,9 @@ backend, account, or telemetry.
 - Named profiles are kept in `localStorage`, scoped to the origin.
 - Shared shell, tokens and backdrop live in `assets/`; each device folder adds
   only its own layout and `driver.js` protocol code.
+- The saved theme is applied in `<head>` before first paint, card space is
+  reserved while pairing is checked, studio pages are prefetched on hover, and
+  device images decode asynchronously — so navigation does not flash or jump.
 
 ## Project layout
 

@@ -60,7 +60,7 @@ function renderDevices(pairedIds, deviceMap) {
   grid.innerHTML = visible.map((r) => {
     const device = deviceMap.get(r.id);
     const art = r.image
-      ? `<img src="${r.image}" alt="" loading="lazy">`
+      ? `<img src="${r.image}" alt="" loading="lazy" decoding="async">`
       : `<svg class="device-glyph" viewBox="0 0 24 24" aria-hidden="true">${icons[r.kind] || icons.mouse || ""}</svg>`;
     const battery = batteryText(r);
     const level = parseInt(battery, 10);
@@ -94,6 +94,19 @@ function renderDevices(pairedIds, deviceMap) {
         open();
       }
     });
+
+    /* Warm the studio document so opening a card feels instant. */
+    const prefetch = () => {
+      const url = card.dataset.path;
+      if (document.querySelector(`link[rel="prefetch"][href="${url}"]`)) return;
+      const link = document.createElement("link");
+      link.rel = "prefetch";
+      link.href = url;
+      link.as = "document";
+      document.head.appendChild(link);
+    };
+    card.addEventListener("pointerenter", prefetch, { once: true });
+    card.addEventListener("focus", prefetch, { once: true });
   });
 
   const more = document.getElementById("btn-more-devices");
