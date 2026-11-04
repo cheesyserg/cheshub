@@ -894,18 +894,11 @@ function isOurs(device) {
 function updateHud() {
   const online = !!(hidDevice && hidDevice.opened);
   const linked = online && !!deviceInfo;
-  const dot = $("hud-dot");
   const status = $("hud-status");
   const mode = $("hud-mode");
-  if (dot) dot.classList.toggle("online", linked);
   if (status) status.textContent = !online ? "Standby" : (linked ? "Online" : "No reply");
   const connectBtn = $("btn-connect");
   if (connectBtn) connectBtn.textContent = online ? "Apply" : "Connect";
-  const deviceDot = $("device-status-dot");
-  if (deviceDot) {
-    deviceDot.classList.toggle("online", linked);
-    deviceDot.title = linked ? "Connected" : (online ? "No reply" : "Disconnected");
-  }
   if (mode) {
     if (!online || !hidDevice) mode.textContent = "None";
     else if (hidDevice.vendorId === WIRELESS.vendorId) mode.textContent = "2.4 GHz";
