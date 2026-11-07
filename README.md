@@ -78,7 +78,8 @@ with every field marked in
 [`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
 
 - 17 lighting effects with per-effect brightness, speed and a seven-colour
-  palette (plus colourful), read back from the keyboard's config block; the
+  palette (plus colourful), read back from the keyboard and kept in sync live
+  when changed with the Fn hotkeys; the
   on-screen keyboard animates an approximation of the selected effect
 - Line-art keyboard with a layout switch: **Knob** (retail B75, rotary knob
   top right in place of End, keycap-sized) or **End key** (no knob)

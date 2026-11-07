@@ -173,6 +173,23 @@ order keys reference them; at most 10 (`MacroBufferNum`), 4096 bytes total.
 Whether the delay is applied after or before an event is **[inferred]**
 (after).
 
+## Change notifications
+
+The keyboard reports on-board changes (Fn lighting hotkeys, wake / sleep)
+unprompted **[bin `ServiceThread_G5` 0x40eae0, `ServiceThread_3632` 0x40d250,
+handler 0x447bd0]**:
+
+| Link | Report | Layout |
+|---|---|---|
+| wired | 8-byte input report | `[rid, 0A, type, a, b, …]` |
+| wireless | 20-byte input report `0x13` | `[13, 0A, …, type (byte 5), a, b, …]` |
+
+`type 2` means the settings changed: the tool re-reads the config block
+(`a = 1` is ignored; over wireless `a = 0` marks the keyboard asleep).
+`type 5` and `type 8` drive screen and key-test UI on other models. The
+studio re-reads on `type 2` and also polls the config block every 3 s while
+the page is visible and no edit is pending.
+
 ## Wireless (2.4 GHz receiver)
 
 Receiver `258A:01BB` ("2.4G Wireless Receiver"). The tool opens the

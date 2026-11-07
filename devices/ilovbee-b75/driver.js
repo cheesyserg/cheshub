@@ -350,7 +350,13 @@
   let link = "wired";                  // "wired" | "wireless"
   let wlWaiters = [];
 
+  function watchReports() {
+    device.removeEventListener("inputreport", onInputReport);
+    device.addEventListener("inputreport", onInputReport);
+  }
+
   function onInputReport(event) {
+    onNotify(event);
     if (link !== "wireless") return;
     const data = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
     const bytes = new Uint8Array(data.length + 1);
@@ -518,8 +524,7 @@
 
     if (isWireless(device)) {
       link = "wireless";
-      device.removeEventListener("inputreport", onInputReport);
-      device.addEventListener("inputreport", onInputReport);
+      watchReports();
       setDiag("diag-interface", "wireless channel, usage page 0xFF02 / 0x0002, report 0x13", true);
       updateHud(true);
       let awake = true;
@@ -542,6 +547,7 @@
       } catch (err) { setDiag("diag-psd", err.message, false); }
     } else {
       link = "wired";
+      watchReports();
       const pick = pickCollection(device);
       if (!pick) throw new Error("this interface can't be configured — use Try Another Interface");
       reportId = pick.reportId;
@@ -561,6 +567,7 @@
       store();
     }
     if (Object.values(dirty).some(Boolean)) scheduleApply();
+    startPolling();
   }
 
   /* The receiver (and a Bluetooth link) carries the 0x13 report on
@@ -620,13 +627,15 @@
     if (text) text.textContent = !connected ? "--%" : (battery === null ? "n/a" : `${battery}%${charging ? " ⚡" : ""}`);
     if (bar) bar.style.width = connected && battery !== null ? `${Math.max(0, Math.min(100, battery))}%` : "0%";
     const mode = $("hud-mode");
-    if (mode) mode.textContent = connected ? linkLabel() : "None";
+    if (mode) mode.textContent = connected ? linkLabel() + (asleep ? " · asleep" : "") : "None";
   }
 
   navigator.hid?.addEventListener("disconnect", (event) => {
     if (event.device === device) {
       device = null;
       cfg = null;
+      clearInterval(pollTimer);
+      clearTimeout(refreshTimer);
       updateHud(false);
       toast("Keyboard disconnected");
     }
@@ -659,6 +668,90 @@
       toast("Couldn't read settings from the keyboard.");
     }
   }
+
+  /* ------------------------------------------------- live state from the board
+
+     The keyboard announces on-board changes (Fn lighting hotkeys, wake/sleep)
+     with a notification whose second byte is 0x0A:
+       wired:    [rid, 0A, type, a, b, ...]           (8-byte input report)
+       wireless: [13, 0A, .., .., .., type, a, b, ...] (20-byte input report)
+     type 2 = settings changed; the vendor tool re-reads the config block then
+     (and over wireless, a = 0 means the keyboard went to sleep). A slow poll
+     covers anything that arrives without a notification. */
+  const POLL_MS = 3000;
+  const POWER_EVERY = 20;              // battery on every 20th poll (~1 min)
+  let refreshTimer = null;
+  let pollTimer = null;
+  let pollCount = 0;
+  let lastWrite = 0;
+  let asleep = false;
+
+  function onNotify(event) {
+    const d = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+    let type;
+    let a;
+    if (link === "wireless") {
+      if (event.reportId !== WL_REPORT || d[0] !== 0x0A) return;
+      type = d[4];
+      a = d[5];
+    } else {
+      if (d[0] !== 0x0A) return;
+      type = d[1];
+      a = d[2];
+    }
+    log("<< event", d.subarray(0, 8));
+    if (type !== 2) return;
+    if (link === "wireless" && a === 0) {
+      asleep = true;
+      updateHud(true);
+      return;
+    }
+    asleep = false;
+    scheduleRefresh(250);
+  }
+
+  function scheduleRefresh(delay) {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(refreshFromDevice, delay);
+  }
+
+  /* Re-read the config block and update the UI if the keyboard changed it.
+     Skipped while our own edits are pending or being written, so a poll never
+     overwrites what the user just picked. */
+  async function refreshFromDevice() {
+    if (!device || !device.opened) return;
+    if (Object.values(dirty).some(Boolean) || applying || recording || performance.now() - lastWrite < 1500) {
+      scheduleRefresh(800);
+      return;
+    }
+    try {
+      const block = await readCfg();
+      if (Object.values(dirty).some(Boolean) || applying) return;
+      asleep = false;
+      if (!cfg || block.some((v, i) => v !== cfg[i])) {
+        cfg = block;
+        setDiag("diag-cfg", hex(cfg), true);
+        decodeCfg(cfg);
+        renderLighting();
+        renderSettings();
+      }
+      if (++pollCount % POWER_EVERY === 0) await readPower();
+    } catch (err) {
+      // A sleeping wireless keyboard simply stops answering.
+      if (link === "wireless") { asleep = true; updateHud(true); }
+    }
+  }
+
+  function startPolling() {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(() => {
+      if (!document.hidden) refreshFromDevice();
+    }, POLL_MS);
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && device) scheduleRefresh(100);
+  });
 
   async function readPower() {
     try {
@@ -890,6 +983,7 @@
         todo.keyRgb = false;
       }
       store();
+      lastWrite = performance.now();
       setDiag("diag-error", "—");
       setSaveState("saved");
       if (!options.quiet) toast(options.reset ? "Factory settings restored" : "Saved to keyboard");
