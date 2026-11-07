@@ -243,6 +243,16 @@
 
   const $ = (id) => document.getElementById(id);
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /* Minimum spacing between packets instead of a fixed sleep before each:
+     back-to-back packets still get the vendor's gap, but a packet sent after
+     an idle moment goes out immediately. */
+  let lastPacketAt = 0;
+  async function spaceOut(gap) {
+    const wait = lastPacketAt + gap - performance.now();
+    if (wait > 0) await sleep(wait);
+    lastPacketAt = performance.now();
+  }
   const hex = (bytes) => Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(" ");
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
@@ -334,9 +344,29 @@
     throw lastErr;
   }
 
+  /* The vendor waits 25 ms before fetching a reply; asking earlier could
+     return the previous answer still sitting in the buffer. Keep that wait,
+     and only retry briefly if the reply is not there yet. */
+  async function receiveSoon(cmd) {
+    const delays = [PACKET_GAP_MS, 15, 25];
+    let lastErr = null;
+    for (const d of delays) {
+      await sleep(d);
+      try {
+        const reply = await receive(cmd);
+        lastPacketAt = performance.now();
+        return reply;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+
   async function receive(cmd) {
     const view = await device.receiveFeatureReport(reportId);
     const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    if (bytes[0] !== cmd && bytes[1] !== cmd) throw new Error(`reply cmd 0x${(bytes[0] || 0).toString(16)} != 0x${cmd.toString(16)}`);
     log("<<", bytes);
     let off = -1;
     if (bytes[0] === cmd) off = 0;
@@ -412,7 +442,7 @@
     for (let i = 0; i < total; i++) {
       const frameBytes = wlFrame(cmd, total, i, sub, bytes.subarray(i * WL_CHUNK, (i + 1) * WL_CHUNK));
       for (let attempt = 0; ; attempt++) {
-        await sleep(WL_GAP_MS);
+        await spaceOut(WL_GAP_MS);
         const ack = wlWait(cmd, (b) => (b[2] & 0x80 ? "retry" : "ok"), WL_TIMEOUT_MS);
         await wlSend(frameBytes);
         const result = await ack;
@@ -455,6 +485,7 @@
       return index >= total - 1 ? out : undefined;
     }, 3000);
     const req = wlFrame(cmd, 1, 0, 0, new Uint8Array(0));
+    await spaceOut(WL_GAP_MS);
     await wlSend(req);
     return done;
   }
@@ -474,7 +505,7 @@
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
       const packets = Math.max(1, Math.ceil(bytes.length / CHUNK));
       for (let i = 0; i < packets; i++) {
-        await sleep(gap);
+        await spaceOut(gap);
         await sendFrame(frame(cmd, sub, packets, i, bytes.subarray(i * CHUNK, (i + 1) * CHUNK)));
       }
       setDiag("diag-last", `0x${cmd.toString(16).padStart(2, "0")} write ${bytes.length} B`, true);
@@ -498,13 +529,12 @@
       const packets = Math.max(1, Math.ceil(length / CHUNK));
       for (let i = 0, done = 0; i < packets; i++) {
         const size = Math.min(CHUNK, length - done);
-        await sleep(PACKET_GAP_MS);
+        await spaceOut(PACKET_GAP_MS);
         const req = frame(cmd, sub, packets, i, new Uint8Array(0));
         req[5] = size & 0xFF;
         req[6] = size >> 8;
         await sendFrame(req);
-        await sleep(PACKET_GAP_MS);
-        const reply = await receive(cmd);
+        const reply = await receiveSoon(cmd);
         out.set(reply.subarray(7, 7 + size), done);
         done += size;
       }
@@ -634,7 +664,7 @@
     if (event.device === device) {
       device = null;
       cfg = null;
-      clearInterval(pollTimer);
+      clearTimeout(pollTimer);
       clearTimeout(refreshTimer);
       updateHud(false);
       toast("Keyboard disconnected");
@@ -678,11 +708,21 @@
      type 2 = settings changed; the vendor tool re-reads the config block then
      (and over wireless, a = 0 means the keyboard went to sleep). A slow poll
      covers anything that arrives without a notification. */
-  const POLL_MS = 3000;
-  const POWER_EVERY = 20;              // battery on every 20th poll (~1 min)
+  /* Adaptive polling. Idle: a slow heartbeat. When the keyboard is seen
+     changing (a notification, or a poll that finds a difference) the rate goes
+     up for a few seconds so a run of hotkey presses tracks closely, then
+     falls back. Wireless polls are slower to spare the radio and battery. */
+  const POLL = {
+    wired: { idle: 1500, active: 300 },
+    wireless: { idle: 3000, active: 700 }
+  };
+  const ACTIVE_FOR_MS = 6000;
+  const POWER_EVERY_MS = 60000;
+  let activeUntil = 0;
+  let lastPower = 0;
+  let refreshing = false;
   let refreshTimer = null;
   let pollTimer = null;
-  let pollCount = 0;
   let lastWrite = 0;
   let asleep = false;
 
@@ -707,7 +747,8 @@
       return;
     }
     asleep = false;
-    scheduleRefresh(250);
+    activeUntil = performance.now() + ACTIVE_FOR_MS;
+    scheduleRefresh(0);
   }
 
   function scheduleRefresh(delay) {
@@ -720,33 +761,46 @@
      overwrites what the user just picked. */
   async function refreshFromDevice() {
     if (!device || !device.opened) return;
-    if (Object.values(dirty).some(Boolean) || applying || recording || performance.now() - lastWrite < 1500) {
-      scheduleRefresh(800);
+    if (refreshing) return;
+    if (Object.values(dirty).some(Boolean) || applying || recording || performance.now() - lastWrite < 600) {
+      scheduleRefresh(300);
       return;
     }
+    refreshing = true;
     try {
       const block = await readCfg();
       if (Object.values(dirty).some(Boolean) || applying) return;
       asleep = false;
       if (!cfg || block.some((v, i) => v !== cfg[i])) {
+        activeUntil = performance.now() + ACTIVE_FOR_MS;
         cfg = block;
         setDiag("diag-cfg", hex(cfg), true);
         decodeCfg(cfg);
         renderLighting();
         renderSettings();
       }
-      if (++pollCount % POWER_EVERY === 0) await readPower();
+      if (performance.now() - lastPower > POWER_EVERY_MS) {
+        lastPower = performance.now();
+        await readPower();
+      }
     } catch (err) {
       // A sleeping wireless keyboard simply stops answering.
       if (link === "wireless") { asleep = true; updateHud(true); }
+    } finally {
+      refreshing = false;
     }
   }
 
   function startPolling() {
-    clearInterval(pollTimer);
-    pollTimer = setInterval(() => {
-      if (!document.hidden) refreshFromDevice();
-    }, POLL_MS);
+    clearTimeout(pollTimer);
+    lastPower = performance.now();
+    const tick = async () => {
+      if (!device) return;
+      if (!document.hidden) await refreshFromDevice();
+      const rates = POLL[link] || POLL.wired;
+      pollTimer = setTimeout(tick, performance.now() < activeUntil ? rates.active : rates.idle);
+    };
+    pollTimer = setTimeout(tick, (POLL[link] || POLL.wired).idle);
   }
 
   document.addEventListener("visibilitychange", () => {
@@ -1032,7 +1086,7 @@
   /* --------------------------------------------------------- auto-apply */
 
   const AUTO_DELAY_MS = 450;          // keys, macros: let a burst of edits settle
-  const FAST_DELAY_MS = 80;           // lighting: feel immediate
+  const FAST_DELAY_MS = 40;           // lighting: feel immediate
   let autoTimer = null;
   let applying = null;
 

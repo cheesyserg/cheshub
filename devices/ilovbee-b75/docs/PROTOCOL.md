@@ -187,8 +187,9 @@ handler 0x447bd0]**:
 `type 2` means the settings changed: the tool re-reads the config block
 (`a = 1` is ignored; over wireless `a = 0` marks the keyboard asleep).
 `type 5` and `type 8` drive screen and key-test UI on other models. The
-studio re-reads on `type 2` and also polls the config block every 3 s while
-the page is visible and no edit is pending.
+studio re-reads on `type 2` at once, and polls the config block while the
+page is visible and no edit is pending: every 1.5 s when idle (3 s over
+wireless), every 0.3 s (0.7 s) for six seconds after a change is seen.
 
 ## Wireless (2.4 GHz receiver)
 
