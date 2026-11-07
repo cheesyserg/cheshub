@@ -30,6 +30,21 @@ window.CHESHUB_DEVICES = [
     ]
   },
   {
+    id: "ilovbee-b75",
+    name: "iLovbee B75",
+    short: "iLovbee B75",
+    type: "75% RGB Mechanical Keyboard",
+    kind: "keyboard",
+    path: "devices/ilovbee-b75/index.html",
+    // Wired USB. The vendor tool talks to the collection on usage page
+    // 0xFF00 (usage 1) or 0xFF02 (usage 1/2) that has a 0x208-byte
+    // feature report.
+    filters: [
+      { vendorId: 0x258A, productId: 0x01E7, usagePage: 0xFF00 },
+      { vendorId: 0x258A, productId: 0x01E7, usagePage: 0xFF02 }
+    ]
+  },
+  {
     id: "tozo-ht3",
     name: "TOZO HT3 Headset",
     short: "TOZO HT3",
@@ -49,6 +64,7 @@ window.CHESHUB_DEVICES = [
 
   const icons = {
     mouse: '<rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/>',
+    keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h1M10 10h1M14 10h1M18 10h1M7 14h10"/>',
     headset: '<path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="2" y="13" width="4" height="7" rx="2"/><rect x="18" y="13" width="4" height="7" rx="2"/>'
   };
 

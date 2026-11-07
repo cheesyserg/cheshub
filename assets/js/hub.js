@@ -47,7 +47,7 @@ function renderDevices(pairedIds, deviceMap) {
       <div class="empty-state">
         <svg class="empty-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="5"/><path d="M12 6v4"/></svg>
         <div class="empty-title">No paired devices</div>
-        <p class="empty-text">Use <strong>Pair Device</strong> to connect a supported mouse or headset.</p>
+        <p class="empty-text">Use <strong>Pair Device</strong> to connect a supported mouse, keyboard or headset.</p>
       </div>`;
     if (moreHost) moreHost.innerHTML = "";
     return;
@@ -207,7 +207,30 @@ function readAjazz(device) {
   });
 }
 
+/* iLovbee B75: GetPower (0x87) over the 0x208-byte feature report.
+   Byte 0 of the reply data is read as the level (inferred, see PROTOCOL.md). */
+async function readB75(device) {
+  const col = (device.collections || []).find((c) => c.usagePage >= 0xFF00 && (c.featureReports || []).length);
+  if (!col) return null;
+  const rid = col.featureReports[0].reportId;
+  const frame = new Uint8Array(0x207);
+  frame[0] = 0x87; frame[3] = 1; frame[5] = 2;
+  try {
+    await device.sendFeatureReport(rid, frame);
+    await new Promise((r) => setTimeout(r, 25));
+    const view = await device.receiveFeatureReport(rid);
+    const data = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    const off = data[0] === 0x87 ? 0 : (data[1] === 0x87 ? 1 : -1);
+    if (off < 0) return null;
+    const level = data[off + 7];
+    return level <= 100 ? { battery: level, charging: !!data[off + 8] } : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 function readBattery(entry, device) {
+  if (entry.id === "ilovbee-b75") return withOpen(device, () => readB75(device));
   if (entry.id === "tecknet-tk-gm012") return withOpen(device, () => readTk(device));
   if (entry.id === "ajazz-aj139") return withOpen(device, () => readAjazz(device));
   return Promise.resolve(null);

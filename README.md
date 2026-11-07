@@ -19,6 +19,7 @@ configure it. No install, no admin rights, no background service.
 |---|---|---|---|
 | **TECKNET TK-GM012** | Wireless gaming mouse | WebHID | [Studio](https://cheesyserg.github.io/cheshub/devices/tecknet-tk-gm012/) |
 | **AJAZZ AJ139 V2 MC** | Gaming mouse | WebHID | [Studio](https://cheesyserg.github.io/cheshub/devices/ajazz-aj139/) |
+| **iLovbee B75** | 75% RGB mechanical keyboard | WebHID | [Studio](https://cheesyserg.github.io/cheshub/devices/ilovbee-b75/) |
 | **TOZO HT3** | Hybrid ANC headset | Web Serial | [Studio](https://cheesyserg.github.io/cheshub/devices/tozo-ht3/) |
 
 ### TECKNET TK-GM012
@@ -66,6 +67,25 @@ map is in
 Lighting studio, report rate, DPI stages, and the sensor controls exposed by the
 PAW sensor (motion sync, ripple control, angle snapping, esports mode, LOD,
 debounce, sleep, invert scroll).
+
+### iLovbee B75
+
+Wired USB (`258A:01E7`). Protocol reverse-engineered from the vendor's
+iLovbee utility (`CDevG5KB`, `Fw=2`) and its `Dev/01E7/KB.ini`, documented
+with every field marked in
+[`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
+
+- 17 lighting effects with per-effect brightness, speed and a seven-colour
+  palette (plus colourful), read back from the keyboard's config block
+- Per-key colour painting for the Custom effect
+- Base-layer key remapping: keys with modifiers, media, mouse buttons,
+  macros or disabled; the knob is included
+- Macro editor with recording, repeat-N and three loop modes
+- Debounce (Office / Gaming), wireless sleep timeout, factory restore
+
+Key assignments, macros, palettes and the per-key pattern cannot be read
+from the keyboard, so they are kept in the browser and written on
+**Apply**. The 2.4 GHz dongle and Bluetooth are not supported.
 
 ### TOZO HT3
 
@@ -236,5 +256,5 @@ download instead.
 [GNU General Public License v3.0](LICENSE).
 
 ChesHub is an unofficial community project. It is not affiliated with, endorsed
-by, or supported by AJAZZ, TECKNET, or TOZO. Writing to firmware-controlled
+by, or supported by AJAZZ, iLovbee, TECKNET, or TOZO. Writing to firmware-controlled
 hardware carries risk — use at your own.
