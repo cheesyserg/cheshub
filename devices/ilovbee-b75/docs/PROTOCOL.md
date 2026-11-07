@@ -140,6 +140,7 @@ Entry byte 0 is a category (`keyinfo_to_hardware_code` 0x410680) **[bin]**:
 | Bytes | Meaning |
 |---|---|
 | `00 mods k2 k1` | keyboard: HID usage `k1`, optional second usage `k2`, modifier bits (1 LCtrl, 2 LShift, 4 LAlt, 8 LWin, 0x10–0x80 right) |
+| `00 bit 00 00` | a modifier key on its own. Sending it as usage `E0`–`E7` in `k1` leaves the key dead (observed on hardware: Left Shift/Ctrl/Alt/Win stopped working) |
 | `01 01 n 00` | mouse button `n` (1 left, 2 right, 3 middle, 4 back, 5 forward) |
 | `01 08 00 00` / `01 09 00 00` | wheel up / down **[inferred]** |
 | `02 00 hi lo` | consumer usage `hi lo` (e.g. `02 00 00 E2` mute, `02 00 01 92` calculator) |

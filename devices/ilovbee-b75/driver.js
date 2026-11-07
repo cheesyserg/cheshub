@@ -33,6 +33,7 @@
     GET_POWER: 0x87
   };
 
+  const MATRIX_FORMAT = 2;             // bump when the matrix encoding changes
   const MATRIX_LEN = 0x7E;             // m_nMatrixLen = m_nLedNum = 126
   const CFG_LEN = 0x80;
   const CFG = {
@@ -370,6 +371,13 @@
 
     updateHud(true);
     await sync(true);
+    // Layers written by older builds carried modifiers as E0-E7 usages,
+    // which the firmware drops; rewrite the base layer once to repair them.
+    if (saved.matrixFormat !== MATRIX_FORMAT) {
+      dirty.matrix = true;
+      saved.matrixFormat = MATRIX_FORMAT;
+      store();
+    }
     if (Object.values(dirty).some(Boolean)) scheduleApply();
   }
 
@@ -555,23 +563,41 @@
     return used;
   }
 
+  /* Keyboard entry: [00, modifier bits, 0, usage]. A modifier key goes in as
+     its bit with no usage — the firmware ignores E0-E7 in the usage byte,
+     which is what dropped Ctrl / Shift / Alt / Win before. */
+  function keyCode(mods, hid) {
+    let m = mods & 0xFF;
+    let u = hid & 0xFF;
+    if (u >= 0xE0 && u <= 0xE7) {
+      m |= 1 << (u - 0xE0);
+      u = 0;
+    }
+    return [0x00, m, 0x00, u];
+  }
+
+  function factoryCode(key) {
+    const c = hexToBytes(key.code);
+    return c[0] === 0x00 ? keyCode(c[1], c[3]) : c;
+  }
+
   function codeFor(key, usedMacros) {
     const a = saved.keys[key.id];
-    if (!a) return hexToBytes(key.code);
+    if (!a) return factoryCode(key);
     switch (a.type) {
-      case "key": return [0x00, a.mods & 0xFF, 0x00, a.hid & 0xFF];
+      case "key": return keyCode(a.mods, a.hid);
       case "media": return [0x02, 0x00, (a.usage >> 8) & 0xFF, a.usage & 0xFF];
       case "raw": return hexToBytes(a.code);
       case "macro": {
         const slot = usedMacros.indexOf(a.macro);
         const m = saved.macros[a.macro];
-        if (slot < 0 || !m) return hexToBytes(key.code);
+        if (slot < 0 || !m) return factoryCode(key);
         const mode = MACRO_MODES.find((x) => x.hw === m.mode) || MACRO_MODES[0];
         const count = mode.hw === 1 ? Math.max(1, Math.min(255, m.count || 1)) : 0;
         return [0x03, mode.hw, count, slot];
       }
       case "off": return [0, 0, 0, 0];
-      default: return hexToBytes(key.code);
+      default: return factoryCode(key);
     }
   }
 
