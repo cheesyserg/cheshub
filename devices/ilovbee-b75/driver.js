@@ -1269,15 +1269,49 @@
     return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
   }
 
+  /* Effects that react to typing: the preview listens to the real keyboard
+     (key presses reach the page while it has focus), like the board does. */
+  const REACTIVE = new Set([4, 7, 11]);   // Flash Away, Ripples Shining, Reaction
+
   function pressKey(node, now) {
     if (!node) return;
+    const hue = Math.random() * 360;
     node.heat = 1;
-    preview.drops.push({ x: node.x, y: node.y, t0: now, hue: Math.random() * 360 });
-    if (preview.drops.length > 12) preview.drops.shift();
+    node.heatHue = hue;
+    preview.drops.push({ x: node.x, y: node.y, t0: now, hue });
+    if (preview.drops.length > 24) preview.drops.shift();
   }
+
+  /* KeyboardEvent.code -> key id, from each key's factory code. */
+  const CODE_TO_KEY = (() => {
+    const hidToKey = {};
+    KEYS.forEach((key) => {
+      const c = hexToBytes(key.code);
+      if (c[0] !== 0x00) return;
+      if (c[3]) hidToKey[c[3]] = key.id;
+      else if (c[1]) hidToKey[0xE0 + Math.log2(c[1])] = key.id;
+    });
+    const map = {};
+    Object.entries(CODE_TO_HID).forEach(([code, hid]) => { if (hidToKey[hid]) map[code] = hidToKey[hid]; });
+    return map;
+  })();
+
+  window.addEventListener("keydown", (event) => {
+    if (event.repeat || !REACTIVE.has(light.hw) || activeTab === "tab-perkey") return;
+    const id = CODE_TO_KEY[event.code];
+    if (id) pressKey(preview.nodes.find((n) => n.key.id === id), performance.now());
+  });
 
   function startPreview() {
     if (!preview.raf) preview.raf = requestAnimationFrame(previewFrame);
+  }
+
+  /* Stable random hue per key (re-rolled per breathing cycle). */
+  function keyHue(id, salt) {
+    let h = (id * 2654435761 + salt * 40503) >>> 0;
+    h ^= h >>> 13;
+    h = Math.imul(h, 0x5bd1e995) >>> 0;
+    return (h % 3600) / 10;
   }
 
   function previewFrame(now) {
@@ -1301,6 +1335,15 @@
     }
     preview.last = "";
 
+    // Effects that paint over what is already lit keep a per-key colour.
+    if (preview.fxHw !== fx.hw) {
+      preview.fxHw = fx.hw;
+      preview.hold = new Map();
+      preview.drops = [];
+      preview.rain = [];
+      nodes.forEach((n) => { n.heat = 0; });
+    }
+
     if (fx.hw === 0 || (fx.light && st.bright === 0)) {
       nodes.forEach((n) => paintNode(n, null, 0));
       return;
@@ -1311,35 +1354,83 @@
     const t = now / 1000 * rate;
     const fixed = fx.color && !st.colorful ? rgb(palette(fx.hw)[st.slot]) : null;
     const pick = (hue) => fixed || hsl(hue);
+    const hold = preview.hold;
+    const holdOr = (id, fallback) => hold.get(id) || fallback;
 
-    // Random "presses" drive the reactive and drop-style effects.
-    if ([4, 5, 7, 8, 11].includes(fx.hw) && now > preview.nextDrop) {
+    // Stars Twinkle runs on its own.
+    if (fx.hw === 8 && now > preview.nextDrop) {
       pressKey(nodes[Math.floor(Math.random() * nodes.length)], now);
-      preview.nextDrop = now + (fx.hw === 8 ? 90 : 520) / rate;
+      preview.nextDrop = now + 90 / rate;
     }
-    preview.drops = preview.drops.filter((d) => now - d.t0 < 3000 / rate);
+    // Raindrops: drops fall down a column with a short trail.
+    if (fx.hw === 5) {
+      if (!preview.rain) preview.rain = [];
+      if (now > preview.nextDrop) {
+        const src = nodes[Math.floor(Math.random() * nodes.length)];
+        preview.rain.push({ x: src.x, y: 0.08, hue: Math.random() * 360 });
+        preview.nextDrop = now + 260 / rate;
+      }
+      preview.rain.forEach((d) => { d.y += dt * 0.55 * rate; });
+      preview.rain = preview.rain.filter((d) => d.y < 1.35);
+    }
+    preview.drops = preview.drops.filter((d) => now - d.t0 < 3500 / rate);
 
-    if (fx.hw === 9) {
-      preview.snake = (preview.snake + dt * 14 * rate) % SNAKE_PATH.length;
-    }
+    if (fx.hw === 9) preview.snake = (preview.snake + dt * 14 * rate) % SNAKE_PATH.length;
+
+    const breathCycle = Math.floor((t * 2.4) / (2 * Math.PI));
+    const wiper = (t * 1.3) % (2 * Math.PI);
+    const wiperHue = t * 45;
 
     nodes.forEach((n, i) => {
       let c = null;
       let a = 1;
+      const id = n.key.id;
       const dx = n.x - 0.5;
       const dy = (n.y - 0.55) * 0.46;
       const dist = Math.hypot(dx, dy);
-      const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      const ang = Math.atan2(dy, dx);
       switch (fx.hw) {
-        case 1: c = pick(n.x * 300); break;
-        case 2: c = pick(t * 40); a = 0.08 + 0.92 * (0.5 - 0.5 * Math.cos(t * 2.4)); break;
-        case 3: c = hsl(t * 70); break;
-        case 4: case 5: case 8:
-          n.heat = Math.max(0, n.heat - dt * (fx.hw === 8 ? 1.4 : 0.9) * rate);
-          c = pick(n.x * 300 + i * 17); a = fx.hw === 8 ? n.heat : 0.04 + n.heat * 0.96;
+        case 1: // Steady: one colour, or a random colour per key in RGB mode
+          c = fixed || hsl(keyHue(id, 0));
           break;
-        case 6: c = hsl(ang + t * 120); break;
-        case 7: case 11: {
+        case 2: // Breathing: fresh random colours each breath in RGB mode
+          c = fixed || hsl(keyHue(id, breathCycle));
+          a = 0.04 + 0.96 * (0.5 - 0.5 * Math.cos(t * 2.4));
+          break;
+        case 3: c = hsl(t * 70); break;
+        case 4: { // Flash Away: the pressed key fires a trail left and right along its row
+          let best = 0;
+          let hue = 0;
+          preview.drops.forEach((d) => {
+            if (Math.abs(n.y - d.y) > 0.05) return;
+            const age = (now - d.t0) / 1000 * rate;
+            const front = age * 0.9;
+            const off = Math.abs(n.x - d.x);
+            let v = 0;
+            if (off <= front && front - off < 0.32) v = (1 - (front - off) / 0.32) * Math.max(0, 1 - front / 1.0);
+            if (off < 0.02) v = Math.max(v, Math.max(0, 1 - age * 1.6));
+            if (v > best) { best = v; hue = d.hue; }
+          });
+          c = pick(hue);
+          a = best;
+          break;
+        }
+        case 5: { // Raindrops
+          let best = 0;
+          let hue = 0;
+          (preview.rain || []).forEach((d) => {
+            if (Math.abs(n.x - d.x) > 0.03) return;
+            const behind = d.y - n.y;
+            if (behind < -0.04 || behind > 0.3) return;
+            const v = behind < 0 ? 1 + behind / 0.04 : 1 - behind / 0.3;
+            if (v > best) { best = v; hue = d.hue; }
+          });
+          c = pick(hue);
+          a = best;
+          break;
+        }
+        case 6: c = hsl(ang * 180 / Math.PI + t * 120); break;
+        case 7: { // Ripples Shining: a ring from each pressed key
           let best = 0;
           let hue = 0;
           preview.drops.forEach((d) => {
@@ -1348,25 +1439,47 @@
             const v = Math.exp(-Math.pow((dd - r) / 0.035, 2)) * Math.max(0, 1 - r / 0.9);
             if (v > best) { best = v; hue = d.hue; }
           });
-          c = fx.hw === 11 ? pick(hue) : pick(hue + n.x * 120);
-          a = 0.05 + best * 0.95;
+          c = pick(hue);
+          a = best;
           break;
         }
+        case 8:
+          n.heat = Math.max(0, n.heat - dt * 1.4 * rate);
+          c = pick(n.heatHue || keyHue(id, 7));
+          a = n.heat;
+          break;
         case 9: {
-          const pos = SNAKE_PATH.indexOf(n.key.id);
-          let lag = (preview.snake - pos + SNAKE_PATH.length) % SNAKE_PATH.length;
+          const pos = SNAKE_PATH.indexOf(id);
+          const lag = (preview.snake - pos + SNAKE_PATH.length) % SNAKE_PATH.length;
           c = pick(pos * 9);
           a = pos >= 0 && lag < 9 ? 1 - lag / 9 : 0.03;
           break;
         }
         case 10: c = hsl(n.x * 360 - t * 140); break;
-        case 12: {
+        case 11: // Reaction: the pressed key lights and fades
+          n.heat = Math.max(0, n.heat - dt * 0.9 * rate);
+          c = pick(n.heatHue || 0);
+          a = n.heat;
+          break;
+        case 12: { // Sine Wave: the wave repaints keys it passes; colours stay behind it
           const yWave = 0.55 + 0.32 * Math.sin(n.x * Math.PI * 3 - t * 3);
-          c = pick(n.x * 360 - t * 60);
-          a = Math.max(0.05, 1 - Math.abs(n.y - yWave) / 0.22);
+          const onWave = Math.abs(n.y - yWave) < 0.09;
+          if (fixed) {
+            c = fixed;
+            a = onWave ? 1 : 0.3;
+          } else {
+            if (onWave) hold.set(id, hsl(t * 55));
+            c = holdOr(id, hsl(n.x * 300));
+          }
           break;
         }
-        case 13: c = hsl(ang * 2 + t * 90); a = 0.15 + 0.85 * Math.pow(0.5 + 0.5 * Math.cos((ang * Math.PI / 180 - t * 1.5) * 4), 2); break;
+        case 13: { // Rotating Windmill: one wiper repaints keys as it sweeps
+          let diff = Math.abs(((ang + Math.PI * 2) % (Math.PI * 2)) - wiper);
+          diff = Math.min(diff, Math.PI * 2 - diff);
+          if (diff < 0.16) hold.set(id, hsl(wiperHue));
+          c = holdOr(id, hsl(ang * 180 / Math.PI));
+          break;
+        }
         case 14: c = hsl(n.y * 260 - t * 120 + n.x * 30); break;
         case 15: c = hsl(dist * 700 - t * 120); a = 0.25 + 0.75 * (0.5 + 0.5 * Math.cos(dist * 18 - t * 3)); break;
         default: c = pick(n.x * 300);
@@ -1428,6 +1541,7 @@
     show("row-speed", !!fx.speed);
     show("row-color", !!(fx.color || fx.random));
     show("row-custom-hint", fx.hw === CUSTOM_HW);
+    show("row-react-hint", REACTIVE.has(fx.hw));
 
     segment("seg-bright", st.bright);
     segment("seg-speed", st.speed);
@@ -1655,12 +1769,6 @@
       renderKeyEditor();
       renderLayoutPicker();
       renderKeyboard();
-    });
-
-    $("kb-board")?.addEventListener("pointerover", (event) => {
-      const btn = event.target.closest("[data-key]");
-      if (!btn || ![4, 7, 11].includes(light.hw)) return;
-      pressKey(preview.nodes.find((n) => n.key.id === Number(btn.dataset.key)), performance.now());
     });
 
     $("kb-board")?.addEventListener("click", (event) => {
