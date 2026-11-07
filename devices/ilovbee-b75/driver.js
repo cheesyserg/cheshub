@@ -582,7 +582,7 @@
   }
 
   function codeFor(key, usedMacros) {
-    const a = saved.keys[key.id];
+    const a = layout().hide.includes(key.id) ? null : saved.keys[key.id];
     if (!a) return factoryCode(key);
     switch (a.type) {
       case "key": return keyCode(a.mods, a.hid);
@@ -761,14 +761,17 @@
     knob: {
       name: "Knob",
       hide: [81],
-      place: { 82: [801, 49, 847, 95], 83: [790, 14, 812, 36], 84: [836, 14, 858, 36] },
+      // Knob takes End's slot at keycap size; turn left / right sit above it.
+      place: { 82: [807, 58, 842, 93], 83: [796, 22, 818, 44], 84: [831, 22, 853, 44] },
       short: { 83: "↺", 84: "↻", 82: "" }
     },
     classic: {
+      // No knob on this version: its press / turn entries are not shown or
+      // remapped (they keep their factory codes in the matrix).
       name: "End key",
-      hide: [],
-      place: { 82: [48, 14, 70, 36], 83: [22, 14, 44, 36], 84: [74, 14, 96, 36] },
-      short: { 82: "◉", 83: "−", 84: "+" }
+      hide: [82, 83, 84],
+      place: {},
+      short: {}
     }
   };
   const SHORT = { 29: "Home", 44: "PgUp", 80: "PgDn" };
@@ -800,7 +803,7 @@
       <rect class="art-well" x="27" y="45" width="826" height="333" rx="12"/>
       <rect class="art-bar" x="${knob ? 250 : 300}" y="18" width="${knob ? 300 : 280}" height="9" rx="4.5"/>
       <g class="art-hatch">${hatch}</g>
-      <text class="art-badge" x="${knob ? 30 : 110}" y="33">iLovbee</text>
+      <text class="art-badge" x="30" y="33">iLovbee</text>
     </svg>`;
   }
 
@@ -1244,7 +1247,11 @@
       const btn = event.target.closest("[data-layout]");
       if (!btn) return;
       saved.layout = btn.dataset.layout;
+      if (layout().hide.includes(selectedKey)) selectedKey = null;
+      const touchesHidden = layout().hide.some((id) => saved.keys[id]);
       store();
+      if (touchesHidden) markDirty("matrix");
+      renderKeyEditor();
       renderLayoutPicker();
       renderKeyboard();
     });

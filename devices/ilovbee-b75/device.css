@@ -48,9 +48,8 @@
   --kc: transparent;
   position: absolute;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
   padding: 0;
+  overflow: hidden;
   border: 1.4px solid var(--line);
   border-radius: 7px;
   background: transparent;
@@ -70,14 +69,20 @@
   border-radius: 5px;
   pointer-events: none;
 }
+/* Legend sits centred on the keycap top (the ::before surface) and never
+   leaves it. */
 .kb-key span {
-  position: relative;
-  margin: max(3px, 0.55cqw) 0 0 max(3px, 0.6cqw);
-  max-width: calc(100% - 4px);
+  position: absolute;
+  inset: 2px 3px 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  font-size: clamp(5px, 0.95cqw, 10px);
   letter-spacing: -0.2px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 .kb-key:hover { border-color: var(--text); color: var(--text); }
 .kb-key:active { transform: translateY(1px); }
@@ -97,7 +102,7 @@
   font-size: clamp(7px, 1.2cqw, 12px);
 }
 .kb-key.knob::before { inset: 3px; border-radius: 50%; }
-.kb-key.knob span { margin: 0; }
+.kb-key.knob span { inset: 3px; }
 /* The press target of the top-right knob gets knurled edges. */
 .kb-board.layout-knob .kb-key[data-key="82"]::before {
   inset: 4px;
@@ -106,9 +111,13 @@
 .kb-board.layout-knob .kb-key[data-key="82"]::after {
   content: "";
   position: absolute;
-  inset: 30%;
-  border: 1px solid var(--line-soft);
-  border-radius: 50%;
+  top: 18%;
+  left: 50%;
+  width: 1.5px;
+  height: 22%;
+  margin-left: -0.75px;
+  border-radius: 1px;
+  background: var(--line);
 }
 .kb-board.layout-knob .kb-key[data-key="83"],
 .kb-board.layout-knob .kb-key[data-key="84"] { border-style: dashed; }
