@@ -87,9 +87,9 @@
         </div>
       </div>
       <div class="header-actions">
-        <span class="pending-note" id="pending-note" hidden>Unsaved changes</span>
+        <span class="pending-note" id="pending-note" aria-live="polite" hidden></span>
         <button class="btn-ghost" id="btn-sync" type="button">Sync</button>
-        <button class="btn-primary" id="btn-connect" type="button">Apply</button>
+        <button class="btn-primary" id="btn-connect" type="button" title="Changes are written automatically; this rewrites everything">Write All</button>
       </div>
     </header>
 
@@ -221,8 +221,8 @@
                 <button class="btn-ghost danger" id="btn-factory" type="button">Restore factory settings</button>
               </div>
               <p class="section-note">Key assignments, macros, colour slots and the per-key pattern
-                cannot be read back from the keyboard, so they are kept in this browser and written on
-                <strong>Apply</strong>.</p>
+                cannot be read back from the keyboard, so they are kept in this browser. Every change is
+                written to the keyboard automatically a moment after you make it.</p>
             </div>
           </div>
 

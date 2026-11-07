@@ -370,6 +370,7 @@
 
     updateHud(true);
     await sync(true);
+    if (Object.values(dirty).some(Boolean)) scheduleApply();
   }
 
   function hex4(v) { return (v || 0).toString(16).toUpperCase().padStart(4, "0"); }
@@ -610,55 +611,94 @@
 
   /* ================================================================= apply */
 
+  /* Writes whatever changed. Flags are taken up front so edits made while a
+     write is on the wire stay pending and go out on the next pass. */
   async function apply(options = {}) {
     if (!device) return connect();
-    const btn = $("btn-connect");
-    if (btn) btn.disabled = true;
+    const todo = {};
+    Object.keys(dirty).forEach((part) => { todo[part] = dirty[part] || !!options.all; dirty[part] = false; });
+    if (options.reset) todo.cfg = true;
+    setSaveState("saving");
     try {
-      if (dirty.matrix || options.all) {
+      if (todo.matrix) {
         const { matrix, used } = buildMatrix();
         await write(CMD.SET_MATRIX, 0, matrix);
         if (used.length) await write(CMD.SET_MACRO, 0, buildMacroBuffer(used), 200);
-        dirty.matrix = false;
+        todo.matrix = false;
       }
-      if (dirty.cfg || options.all || options.reset) {
+      if (todo.cfg) {
         const current = await readCfg();
         cfg = encodeCfg(current, options);
         await write(CMD.SET_CFG, 0, cfg);
-        dirty.cfg = false;
+        todo.cfg = false;
       }
-      if (dirty.rgbTab || options.all) {
+      if (todo.rgbTab) {
         await write(CMD.SET_RGB_TAB, 0, buildRgbTab());
-        dirty.rgbTab = false;
+        todo.rgbTab = false;
       }
-      if (dirty.keyRgb || options.all) {
+      if (todo.keyRgb) {
         await write(CMD.SET_KEY_RGB, 0, buildKeyRgb());
-        dirty.keyRgb = false;
+        todo.keyRgb = false;
       }
       store();
       setDiag("diag-error", "—");
-      toast(options.reset ? "Factory reset sent" : "Settings written to keyboard");
+      setSaveState("saved");
+      if (!options.quiet) toast(options.reset ? "Factory reset sent" : "Settings written to keyboard");
     } catch (err) {
+      Object.keys(todo).forEach((part) => { if (todo[part]) dirty[part] = true; });
       setDiag("diag-error", err.message, false);
+      setSaveState("error");
       toast("Write failed: " + err.message);
     } finally {
-      if (btn) btn.disabled = false;
       renderDirty();
     }
+  }
+
+  /* --------------------------------------------------------- auto-apply */
+
+  const AUTO_DELAY_MS = 450;
+  let autoTimer = null;
+  let applying = null;
+
+  function scheduleApply() {
+    clearTimeout(autoTimer);
+    if (!device) return;
+    autoTimer = setTimeout(runAutoApply, AUTO_DELAY_MS);
+  }
+
+  async function runAutoApply() {
+    if (!device || !Object.values(dirty).some(Boolean)) return;
+    if (recording || applying) { scheduleApply(); return; }
+    applying = apply({ quiet: true });
+    try { await applying; } finally { applying = null; }
+    if (Object.values(dirty).some(Boolean)) scheduleApply();
   }
 
   function markDirty(part) {
     dirty[part] = true;
     store();
     renderDirty();
+    scheduleApply();
+  }
+
+  let saveState = "";
+  function setSaveState(state) {
+    saveState = state;
+    renderDirty();
   }
 
   function renderDirty() {
     const pending = Object.values(dirty).some(Boolean);
-    const btn = $("btn-connect");
-    if (btn) btn.classList.toggle("pending", pending);
     const note = $("pending-note");
-    if (note) note.hidden = !pending;
+    if (!note) return;
+    let text = "";
+    if (!device && pending) text = "Not connected — changes kept";
+    else if (saveState === "saving" || (pending && device)) text = "Saving…";
+    else if (saveState === "error") text = "Write failed";
+    else if (saveState === "saved") text = "Saved to keyboard";
+    note.textContent = text;
+    note.hidden = !text;
+    note.dataset.state = saveState === "error" ? "error" : (text === "Saved to keyboard" ? "ok" : "busy");
   }
 
   /* ============================================================ keyboard UI */
@@ -690,23 +730,171 @@
   function renderKeyboard() {
     const board = $("kb-board");
     if (!board) return;
-    const fx = EFFECTS.find((e) => e.hw === light.hw);
-    const st = light.effects[light.hw];
-    const pal = palette(light.hw);
     board.innerHTML = KEYS.map((key) => {
       const r = keyRect(key);
       const a = assignmentLabel(key);
-      let glow = "";
-      if (activeTab === "tab-perkey" || light.hw === CUSTOM_HW) {
-        glow = saved.perKey[key.idx] || "";
-      } else if (fx && fx.hw && st) {
-        glow = st.colorful || !fx.color ? `hsl(${(r.x / KB_W) * 300}, 90%, 60%)` : pal[st.slot];
-      }
-      const style = `left:${(r.x / KB_W) * 100}%;top:${(r.y / KB_H) * 100}%;width:${(r.w / KB_W) * 100}%;height:${(r.h / KB_H) * 100}%;${glow ? `--kc:${glow};` : ""}`;
-      const cls = ["kb-key", key.rect[2] ? "" : "knob", glow ? "lit" : "", a ? "remapped" : "", selectedKey === key.id ? "selected" : ""].join(" ");
+      const style = `left:${(r.x / KB_W) * 100}%;top:${(r.y / KB_H) * 100}%;width:${(r.w / KB_W) * 100}%;height:${(r.h / KB_H) * 100}%;`;
+      const cls = ["kb-key", key.rect[2] ? "" : "knob", a ? "remapped" : "", selectedKey === key.id ? "selected" : ""].join(" ");
       return `<button type="button" class="${cls}" style="${style}" data-key="${key.id}" title="${esc(key.label)}${a ? " → " + esc(a) : ""}"><span>${esc(SHORT[key.id] || key.label)}</span></button>`;
     }).join("");
-    board.classList.toggle("dimmed", light.hw === 0 && activeTab !== "tab-perkey");
+    preview.nodes = KEYS.map((key) => {
+      const r = keyRect(key);
+      return {
+        key,
+        el: board.querySelector(`[data-key="${key.id}"]`),
+        x: (r.x + r.w / 2) / KB_W,
+        y: (r.y + r.h / 2) / KB_H,
+        heat: 0
+      };
+    });
+    preview.last = "";
+    startPreview();
+  }
+
+  /* ------------------------------------------------------ lighting preview */
+
+  /* An approximation of each firmware effect, driven by the selected effect,
+     colour slot / colourful, brightness and speed. */
+  const preview = { nodes: [], drops: [], snake: 0, raf: 0, lastFrame: 0, nextDrop: 0, last: "" };
+  const SNAKE_PATH = [];
+
+  function hsl(h, sat = 1, l = 0.5) {
+    h = ((h % 360) + 360) % 360 / 360;
+    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
+    const p = 2 * l - q;
+    const f = (t) => {
+      t = (t + 1) % 1;
+      if (t < 1 / 6) return p + (q - p) * 6 * t;
+      if (t < 1 / 2) return q;
+      if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+      return p;
+    };
+    return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+  }
+
+  function pressKey(node, now) {
+    if (!node) return;
+    node.heat = 1;
+    preview.drops.push({ x: node.x, y: node.y, t0: now, hue: Math.random() * 360 });
+    if (preview.drops.length > 12) preview.drops.shift();
+  }
+
+  function startPreview() {
+    if (!preview.raf) preview.raf = requestAnimationFrame(previewFrame);
+  }
+
+  function previewFrame(now) {
+    preview.raf = requestAnimationFrame(previewFrame);
+    if (now - preview.lastFrame < 33) return;
+    const dt = Math.min(0.1, (now - preview.lastFrame) / 1000);
+    preview.lastFrame = now;
+
+    const nodes = preview.nodes;
+    if (!nodes.length) return;
+    const perKeyView = activeTab === "tab-perkey" || light.hw === CUSTOM_HW;
+    const fx = EFFECTS.find((e) => e.hw === light.hw) || EFFECTS[EFFECTS.length - 1];
+    const st = light.effects[fx.hw] || { bright: DEF_BRIGHT, speed: DEF_SPEED, slot: 0, colorful: true };
+
+    if (perKeyView) {
+      const sig = "pk" + JSON.stringify(saved.perKey);
+      if (sig === preview.last) return;
+      preview.last = sig;
+      nodes.forEach((n) => paintNode(n, saved.perKey[n.key.idx] ? rgb(saved.perKey[n.key.idx]) : null, 1));
+      return;
+    }
+    preview.last = "";
+
+    if (fx.hw === 0 || (fx.light && st.bright === 0)) {
+      nodes.forEach((n) => paintNode(n, null, 0));
+      return;
+    }
+
+    const level = fx.light ? LIGHT_HW[st.bright] / LIGHT_HW[LIGHT_HW.length - 1] : 1;
+    const rate = fx.speed ? 0.35 + st.speed * 0.4 : 0.8;
+    const t = now / 1000 * rate;
+    const fixed = fx.color && !st.colorful ? rgb(palette(fx.hw)[st.slot]) : null;
+    const pick = (hue) => fixed || hsl(hue);
+
+    // Random "presses" drive the reactive and drop-style effects.
+    if ([4, 5, 7, 8, 11].includes(fx.hw) && now > preview.nextDrop) {
+      pressKey(nodes[Math.floor(Math.random() * nodes.length)], now);
+      preview.nextDrop = now + (fx.hw === 8 ? 90 : 520) / rate;
+    }
+    preview.drops = preview.drops.filter((d) => now - d.t0 < 3000 / rate);
+
+    if (fx.hw === 9) {
+      preview.snake = (preview.snake + dt * 14 * rate) % SNAKE_PATH.length;
+    }
+
+    nodes.forEach((n, i) => {
+      let c = null;
+      let a = 1;
+      const dx = n.x - 0.5;
+      const dy = (n.y - 0.55) * 0.46;
+      const dist = Math.hypot(dx, dy);
+      const ang = Math.atan2(dy, dx) * 180 / Math.PI;
+      switch (fx.hw) {
+        case 1: c = pick(n.x * 300); break;
+        case 2: c = pick(t * 40); a = 0.08 + 0.92 * (0.5 - 0.5 * Math.cos(t * 2.4)); break;
+        case 3: c = hsl(t * 70); break;
+        case 4: case 5: case 8:
+          n.heat = Math.max(0, n.heat - dt * (fx.hw === 8 ? 1.4 : 0.9) * rate);
+          c = pick(n.x * 300 + i * 17); a = fx.hw === 8 ? n.heat : 0.04 + n.heat * 0.96;
+          break;
+        case 6: c = hsl(ang + t * 120); break;
+        case 7: case 11: {
+          let best = 0;
+          let hue = 0;
+          preview.drops.forEach((d) => {
+            const r = (now - d.t0) / 1000 * rate * 0.45;
+            const dd = Math.hypot(n.x - d.x, (n.y - d.y) * 0.46);
+            const v = Math.exp(-Math.pow((dd - r) / 0.035, 2)) * Math.max(0, 1 - r / 0.9);
+            if (v > best) { best = v; hue = d.hue; }
+          });
+          c = fx.hw === 11 ? pick(hue) : pick(hue + n.x * 120);
+          a = 0.05 + best * 0.95;
+          break;
+        }
+        case 9: {
+          const pos = SNAKE_PATH.indexOf(n.key.id);
+          let lag = (preview.snake - pos + SNAKE_PATH.length) % SNAKE_PATH.length;
+          c = pick(pos * 9);
+          a = pos >= 0 && lag < 9 ? 1 - lag / 9 : 0.03;
+          break;
+        }
+        case 10: c = hsl(n.x * 360 - t * 140); break;
+        case 12: {
+          const yWave = 0.55 + 0.32 * Math.sin(n.x * Math.PI * 3 - t * 3);
+          c = pick(n.x * 360 - t * 60);
+          a = Math.max(0.05, 1 - Math.abs(n.y - yWave) / 0.22);
+          break;
+        }
+        case 13: c = hsl(ang * 2 + t * 90); a = 0.15 + 0.85 * Math.pow(0.5 + 0.5 * Math.cos((ang * Math.PI / 180 - t * 1.5) * 4), 2); break;
+        case 14: c = hsl(n.y * 260 - t * 120 + n.x * 30); break;
+        case 15: c = hsl(dist * 700 - t * 120); a = 0.25 + 0.75 * (0.5 + 0.5 * Math.cos(dist * 18 - t * 3)); break;
+        default: c = pick(n.x * 300);
+      }
+      paintNode(n, c, a * level);
+    });
+  }
+
+  function paintNode(n, c, a) {
+    if (!n.el) return;
+    if (!c || a <= 0.02) {
+      n.el.classList.remove("lit");
+      n.el.style.removeProperty("--kc");
+      return;
+    }
+    const alpha = Math.max(0, Math.min(1, a));
+    n.el.classList.add("lit");
+    n.el.style.setProperty("--kc", `rgb(${c[0] | 0} ${c[1] | 0} ${c[2] | 0} / ${alpha.toFixed(2)})`);
+  }
+
+  function buildSnakePath() {
+    // Serpentine over the five main rows (top row left to right, next row back).
+    const rows = [57, 121, 172, 223, 274, 325].map((y) => KEYS.filter((k) => k.rect[1] >= y - 2 && k.rect[1] <= y + 2 && k.rect[2])
+      .sort((a, b) => a.rect[0] - b.rect[0]));
+    rows.forEach((row, i) => (i % 2 ? row.slice().reverse() : row).forEach((k) => SNAKE_PATH.push(k.id)));
   }
 
   function onKeyClick(id) {
@@ -947,9 +1135,15 @@
   /* ================================================================ events */
 
   function wire_() {
-    $("btn-connect")?.addEventListener("click", () => apply());
+    $("btn-connect")?.addEventListener("click", () => apply({ all: true }));
     $("btn-lock-connect")?.addEventListener("click", () => connect());
     $("btn-sync")?.addEventListener("click", () => sync(false));
+
+    $("kb-board")?.addEventListener("pointerover", (event) => {
+      const btn = event.target.closest("[data-key]");
+      if (!btn || ![4, 7, 11].includes(light.hw)) return;
+      pressKey(preview.nodes.find((n) => n.key.id === Number(btn.dataset.key)), performance.now());
+    });
 
     $("kb-board")?.addEventListener("click", (event) => {
       const btn = event.target.closest("[data-key]");
@@ -1213,6 +1407,7 @@
   }
 
   window.addEventListener("DOMContentLoaded", async () => {
+    buildSnakePath();
     populateStatic();
     wire_();
     renderAll();

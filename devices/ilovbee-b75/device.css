@@ -48,11 +48,16 @@
 .kb-key:hover { border-color: var(--border-strong); color: var(--text); }
 .kb-key:active { transform: translateY(1px); }
 
+/* --kc is set every frame by the lighting preview (colour + intensity as alpha). */
 .kb-key.lit {
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 10px -2px var(--kc), inset 0 -3px 8px -4px var(--kc);
-  border-color: color-mix(in srgb, var(--kc) 55%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--kc) 26%, transparent), transparent 70%),
+    linear-gradient(180deg, #2c2c31, #222226);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 12px -2px var(--kc), inset 0 -4px 9px -4px var(--kc);
+  border-color: color-mix(in srgb, var(--kc) 60%, rgba(255, 255, 255, 0.1));
+  color: var(--text);
+  transition: border-color 0.15s ease, transform 0.08s ease;
 }
-.kb-board.dimmed .kb-key.lit { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45); border-color: rgba(255, 255, 255, 0.1); }
 
 .kb-key.knob { border-radius: 50%; font-size: clamp(6px, 0.9cqw, 9px); }
 
@@ -221,7 +226,8 @@
 .danger { color: #e05561 !important; }
 
 .pending-note { font-size: 12px; color: #f2b84b; margin-right: 4px; }
-#btn-connect.pending { box-shadow: 0 0 0 2px rgba(242, 184, 75, 0.45); }
+.pending-note[data-state="ok"] { color: #2ee6c5; }
+.pending-note[data-state="error"] { color: #e05561; }
 
 /* -------------------------------------------------------- diagnostics */
 

@@ -76,7 +76,8 @@ with every field marked in
 [`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
 
 - 17 lighting effects with per-effect brightness, speed and a seven-colour
-  palette (plus colourful), read back from the keyboard's config block
+  palette (plus colourful), read back from the keyboard's config block; the
+  on-screen keyboard animates an approximation of the selected effect
 - Per-key colour painting for the Custom effect
 - Base-layer key remapping: keys with modifiers, media, mouse buttons,
   macros or disabled; the knob is included
@@ -84,8 +85,9 @@ with every field marked in
 - Debounce (Office / Gaming), wireless sleep timeout, factory restore
 
 Key assignments, macros, palettes and the per-key pattern cannot be read
-from the keyboard, so they are kept in the browser and written on
-**Apply**. The 2.4 GHz dongle and Bluetooth are not supported.
+from the keyboard, so they are kept in the browser. Every change is written
+to the keyboard automatically about half a second after it is made;
+**Write All** rewrites everything. The 2.4 GHz dongle and Bluetooth are not supported.
 
 ### TOZO HT3
 
