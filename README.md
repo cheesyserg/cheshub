@@ -78,6 +78,8 @@ with every field marked in
 - 17 lighting effects with per-effect brightness, speed and a seven-colour
   palette (plus colourful), read back from the keyboard's config block; the
   on-screen keyboard animates an approximation of the selected effect
+- Line-art keyboard with a layout switch: **Knob** (retail B75, rotary knob
+  top right in place of End) or **End key** (the vendor tool's artwork)
 - Per-key colour painting for the Custom effect
 - Base-layer key remapping: keys with modifiers, media, mouse buttons,
   macros or disabled; the knob is included
