@@ -8,7 +8,7 @@
   <title>ChesHub | iLovbee B75 Studio</title>
   <link rel="stylesheet" href="../../assets/css/base.css">
   <link rel="stylesheet" href="../../assets/css/studio.css">
-  <link rel="stylesheet" href="device.css?v=20261107i">
+  <link rel="stylesheet" href="device.css?v=20261107k">
   <script src="../../assets/js/theme.js"></script>
 </head>
 <body data-device="ilovbee-b75">
@@ -52,11 +52,6 @@
       <div class="nav-section-title">Devices</div>
       <div id="device-list"></div>
 
-      <div class="nav-section-title">Reference</div>
-      <div class="nav-item" onclick="window.open('docs/PROTOCOL.md','_blank')">
-        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 013 3v13a2 2 0 00-2-2H4V4z"/><path d="M20 4h-6a3 3 0 00-3 3v13a2 2 0 012-2h7V4z"/></svg>
-        <span>Protocol Notes</span>
-      </div>
     </div>
 
     <div class="sidebar-footer">
@@ -87,7 +82,6 @@
         </div>
       </div>
       <div class="header-actions">
-        <span class="pending-note" id="pending-note" aria-live="polite" hidden></span>
         <button class="btn-ghost" id="btn-sync" type="button">Sync</button>
         <button class="btn-primary" id="btn-connect" type="button" title="Changes are written automatically; this rewrites everything">Write All</button>
       </div>
@@ -112,7 +106,7 @@
           <div class="tab-panel active" id="tab-light">
             <div class="panel-section">
               <div class="section-title">Lighting Effect</div>
-              <div class="section-desc">The 17 effects the vendor tool exposes for this board. Settings are kept per effect.</div>
+              <div class="section-desc">Brightness, speed and colour are remembered for each effect.</div>
               <div class="fx-grid" id="fx-grid"></div>
             </div>
             <div class="panel-section">
@@ -205,7 +199,7 @@
             <div class="panel-section">
               <div class="section-title">Keyboard</div>
               <div class="form-row">
-                <div class="form-info"><div class="form-label">Debounce</div><div class="form-hint">Vendor names; hardware values 0x00 / 0x04.</div></div>
+                <div class="form-info"><div class="form-label">Debounce</div><div class="form-hint">How the keyboard filters key chatter.</div></div>
                 <div class="segmented" id="seg-debounce"></div>
               </div>
               <div class="form-row">
@@ -229,40 +223,40 @@
           <div class="tab-panel" id="tab-diagnostics">
             <div class="panel-section">
               <div class="section-title">Connection</div>
-              <div class="section-desc">The board is configured through a 520-byte feature report on its
-                vendor interface. If the interface line is red, re-pair and pick another interface.</div>
+              <div class="section-desc">Connection details for troubleshooting. If the interface line is red, reconnect and
+                choose another interface.</div>
 
               <div class="diag-grid">
                 <div class="diag-cell"><span class="diag-label">Product</span><span id="diag-product">—</span></div>
                 <div class="diag-cell"><span class="diag-label">VID : PID</span><span id="diag-ids">—</span></div>
                 <div class="diag-cell"><span class="diag-label">Interface</span><span id="diag-interface">—</span></div>
-                <div class="diag-cell"><span class="diag-label">Power (0x87)</span><span id="diag-power">—</span></div>
-                <div class="diag-cell"><span class="diag-label">Password (0x82)</span><span id="diag-psd">—</span></div>
-                <div class="diag-cell"><span class="diag-label">Decoded config</span><span id="diag-decode">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Battery</span><span id="diag-power">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Device ID</span><span id="diag-psd">—</span></div>
+                <div class="diag-cell"><span class="diag-label">Current settings</span><span id="diag-decode">—</span></div>
                 <div class="diag-cell"><span class="diag-label">Last command</span><span id="diag-last">—</span></div>
                 <div class="diag-cell"><span class="diag-label">Last error</span><span id="diag-error">—</span></div>
               </div>
 
-              <div class="diag-subtitle">Config block (0x84)</div>
+              <div class="diag-subtitle">Settings data</div>
               <pre class="diag-wire" id="diag-cfg">—</pre>
 
               <div class="diag-subtitle">Collections</div>
               <div class="diag-list" id="diag-collections"></div>
 
-              <div class="diag-subtitle">Wire log</div>
+              <div class="diag-subtitle">Activity log</div>
               <pre class="diag-wire" id="diag-wire">—</pre>
 
               <div class="section-actions">
-                <button class="btn-ghost" id="btn-read-cfg" type="button">Read Config</button>
-                <button class="btn-ghost" id="btn-read-power" type="button">Read Power</button>
-                <button class="btn-ghost" id="btn-read-psd" type="button">Read Password</button>
+                <button class="btn-ghost" id="btn-read-cfg" type="button">Read Settings</button>
+                <button class="btn-ghost" id="btn-read-power" type="button">Read Battery</button>
+                <button class="btn-ghost" id="btn-read-psd" type="button">Read Device ID</button>
                 <button class="btn-ghost" id="btn-pair-any" type="button">Try Another Interface</button>
-                <button class="btn-ghost" id="btn-pair-scan" type="button">Scan Vendor 258A</button>
+                <button class="btn-ghost" id="btn-pair-scan" type="button">Find Keyboard</button>
                 <button class="btn-ghost" id="btn-copy-diag" type="button">Copy Diagnostics</button>
               </div>
-              <p class="section-note">Close the iLovbee utility first — Windows hands out one handle per
-                collection. Only the wired USB connection (<code>258A:01E7</code>) is supported; the 2.4 GHz
-                dongle uses a different protocol class in the vendor tool.</p>
+              <p class="section-note">Close the iLovbee app before connecting — only one program can talk to the keyboard
+                at a time. Works over the USB cable and the 2.4 GHz receiver; wake the keyboard with a
+                key press before connecting wirelessly. Bluetooth is experimental.</p>
             </div>
           </div>
 
@@ -276,8 +270,8 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 01-6 6 6 6 0 01-6-6V8zM12 18v4"/></svg>
         </div>
         <div class="lock-title">Device not connected</div>
-        <p class="lock-text">Plug the B75 in with the USB cable and connect it to configure lighting,
-          keys and macros.</p>
+        <p class="lock-text">Plug in the B75 with its USB cable or 2.4 GHz receiver, then connect to configure
+          lighting, keys and macros.</p>
         <div class="lock-actions">
           <button class="btn-primary" id="btn-lock-connect" type="button">Connect</button>
           <button class="btn-ghost" type="button" onclick="switchTab('tab-diagnostics')">Diagnostics</button>
@@ -290,7 +284,7 @@
   <div id="toast-container"></div>
   <script src="../../assets/js/devices.js"></script>
   <script src="../../assets/js/studio.js"></script>
-  <script src="keymap.js?v=20261107i"></script>
-  <script src="driver.js?v=20261107i"></script>
+  <script src="keymap.js?v=20261107k"></script>
+  <script src="driver.js?v=20261107k"></script>
 </body>
 </html>

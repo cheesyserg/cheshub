@@ -20,8 +20,8 @@ Markers:
 | Report id | whatever id that collection's feature report carries ("RID") **[bin]** |
 | Transfer | `HidD_SetFeature` / `HidD_GetFeature`, always 0x208 bytes including the report id **[bin]** |
 
-The 2.4 GHz dongle and Bluetooth go through other classes (`CDev3632`,
-wireless "password" matching with `Psd=a,0,0,0,0,12`) and are not covered.
+The 2.4 GHz receiver goes through `CDev3632`; see [Wireless](#wireless-24-ghz-receiver)
+below.
 
 ## Packet
 
@@ -172,3 +172,50 @@ key-up and inverts it when encoding (0x42d5c6). Macros get buffer ids in the
 order keys reference them; at most 10 (`MacroBufferNum`), 4096 bytes total.
 Whether the delay is applied after or before an event is **[inferred]**
 (after).
+
+## Wireless (2.4 GHz receiver)
+
+Receiver `258A:01BB` ("2.4G Wireless Receiver"). The tool opens the
+collection on usage page `0xFF02` / usage `2` whose input and output reports
+are 20 bytes with report id `0x13` **[bin `FindWireless` 0x415c10]**, and
+hands it to `CDev3632`, which the keyboard class delegates to when it has no
+wired handle.
+
+Frame (`CDev3632::AccessData` 0x40d750, `WriteFile` of 20 bytes) **[bin]**:
+
+| Byte | Meaning |
+|---|---|
+| 0 | `0x13` (report id) |
+| 1 | command |
+| 2 | packets in this transfer |
+| 3 | packet index |
+| 4 | `sub << 4 \| bytes in this packet` |
+| 5–18 | data, 14 bytes per packet |
+| 19 | checksum: sum of bytes 0–18 |
+
+Every packet waits up to 4 s for an input report with byte 1 = command
+(0x40d2e0): byte 0 `0xFF` is an error, bit 7 of byte 2 asks for a resend
+(up to 5). 15 ms before each packet. Reads send one frame with packets = 1
+and collect reply packets in the same layout until index = packets − 1.
+
+| Wired | Wireless | Function |
+|---|---|---|
+| `0x03` | `0x01` | key matrix, sub = layer |
+| `0x06` | `0x02` | per-key colour, sub = group |
+| `0x05` | `0x03` | macros, one transfer per 512-byte page, sub = page, 100 ms apart |
+| `0x04` | `0x04` | config block |
+| `0x0A` | `0x09` | colour table |
+| `0x84` | `0x44` | config read (128 bytes) |
+| `0x87` | `0x4A` | battery read (2 bytes) |
+| `0x82` | `0x05` | pairing id (6 bytes); `0A 00 00 00 00 12` = B75 (`Psd`) |
+| — | `0x07` | 1 byte: 0 = keyboard asleep / not linked |
+
+Payloads are identical to the wired ones.
+
+## Bluetooth
+
+`Cfg.ini` sets `DisableBT=1`, so the vendor tool never configures this model
+over Bluetooth. The studio uses the wireless protocol above for any
+`258A` device exposing the `0xFF02` / usage `2` channel with report `0x13`,
+which is how a Bluetooth link would most likely appear. **[inferred,
+untested]**

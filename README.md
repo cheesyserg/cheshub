@@ -70,7 +70,9 @@ debounce, sleep, invert scroll).
 
 ### iLovbee B75
 
-Wired USB (`258A:01E7`). Protocol reverse-engineered from the vendor's
+Wired USB (`258A:01E7`) and the 2.4 GHz receiver (`258A:01BB`). Bluetooth is
+attempted with the receiver protocol but untested — the vendor tool disables
+Bluetooth for this model. Protocol reverse-engineered from the vendor's
 iLovbee utility (`CDevG5KB`, `Fw=2`) and its `Dev/01E7/KB.ini`, documented
 with every field marked in
 [`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
@@ -89,7 +91,7 @@ with every field marked in
 Key assignments, macros, palettes and the per-key pattern cannot be read
 from the keyboard, so they are kept in the browser. Every change is written
 to the keyboard automatically about half a second after it is made;
-**Write All** rewrites everything. The 2.4 GHz dongle and Bluetooth are not supported.
+**Write All** rewrites everything.
 
 ### TOZO HT3
 
@@ -128,6 +130,8 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a4", ATTRS{idProduct
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a5", ATTRS{idProduct}=="2255", MODE="0660", TAG+="uaccess"
 # iLovbee B75 (USB cable)
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01e7", MODE="0660", TAG+="uaccess"
+# iLovbee B75 (2.4 GHz receiver)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01bb", MODE="0660", TAG+="uaccess"
 ```
 
 Then reload the rules and re-plug the device (or its receiver):

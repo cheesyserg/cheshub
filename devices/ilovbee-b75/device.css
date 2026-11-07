@@ -290,9 +290,6 @@
 #btn-macro-record.recording { border-color: #e05561; color: #e05561; }
 .danger { color: #e05561 !important; }
 
-.pending-note { font-size: 12px; color: #f2b84b; margin-right: 4px; }
-.pending-note[data-state="ok"] { color: #2ee6c5; }
-.pending-note[data-state="error"] { color: #e05561; }
 
 /* -------------------------------------------------------- diagnostics */
 
@@ -357,5 +354,4 @@
   .form-row .form-info { flex-basis: 100%; }
   .swatches { justify-content: flex-start; }
   .segmented { flex-wrap: wrap; }
-  .pending-note { display: none; }
-}
+  }
