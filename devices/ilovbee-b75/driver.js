@@ -167,6 +167,10 @@
 
   const KEYS = (window.B75_KEYS || []).map(([id, label, rect, idx, code]) => ({ id, label, rect, idx, code }));
   const KEY_BY_ID = new Map(KEYS.map((key) => [key.id, key]));
+  /* Knob press / turn entries: no LED under the knob, so they are never lit
+     in the preview and get no per-key colour. */
+  const UNLIT = new Set([82, 83, 84]);
+  const lightable = (key) => !UNLIT.has(key.id);
 
   let device = null;
   let reportId = 0;
@@ -544,7 +548,7 @@
     const planes = new Uint8Array(MATRIX_LEN * 3);
     KEYS.forEach((key) => {
       const color = saved.perKey[key.idx];
-      if (!color || key.idx >= MATRIX_LEN) return;
+      if (!color || key.idx >= MATRIX_LEN || !lightable(key)) return;
       const [r, g, b] = rgb(color);
       planes[key.idx] = r;
       planes[MATRIX_LEN + key.idx] = g;
@@ -582,7 +586,7 @@
   }
 
   function codeFor(key, usedMacros) {
-    const a = saved.keys[key.id];
+    const a = layout().hide.includes(key.id) ? null : saved.keys[key.id];
     if (!a) return factoryCode(key);
     switch (a.type) {
       case "key": return keyCode(a.mods, a.hid);
@@ -761,14 +765,17 @@
     knob: {
       name: "Knob",
       hide: [81],
-      place: { 82: [801, 49, 847, 95], 83: [790, 14, 812, 36], 84: [836, 14, 858, 36] },
+      // Knob takes End's slot at keycap size; turn left / right sit above it.
+      place: { 82: [800.6, 54.6, 847.4, 101.4], 83: [800, 16, 821, 37], 84: [827, 16, 848, 37] },
       short: { 83: "↺", 84: "↻", 82: "" }
     },
     classic: {
+      // No knob on this version: its press / turn entries are not shown or
+      // remapped (they keep their factory codes in the matrix).
       name: "End key",
-      hide: [],
-      place: { 82: [48, 14, 70, 36], 83: [22, 14, 44, 36], 84: [74, 14, 96, 36] },
-      short: { 82: "◉", 83: "−", 84: "+" }
+      hide: [82, 83, 84],
+      place: {},
+      short: {}
     }
   };
   const SHORT = { 29: "Home", 44: "PgUp", 80: "PgDn" };
@@ -777,8 +784,40 @@
     return LAYOUTS[saved.layout] || LAYOUTS.knob;
   }
 
+  /* Real keycap geometry on a 75% unit grid (traced from the retail board):
+     id -> [column in u, row, width in u]. Row 0 is the F-row; the main block
+     starts a quarter unit lower. The vendor rectangles in keymap.js are only
+     click targets with wide gaps, so they are not used for drawing. */
+  const U = 50;
+  const ORIGIN = [36, 53];
+  const GAP = 3.2;
+  const GRID = (() => {
+    const g = {};
+    const row = (r, items) => items.forEach(([id, x, w]) => { g[id] = [x, r, w || 1]; });
+    const run = (r, first, x, count) => Array.from({ length: count }, (_, i) => [first + i, x + i]);
+    row(0, [[1, 0], ...run(0, 2, 1.25, 4), ...run(0, 6, 5.5, 4), ...run(0, 10, 9.75, 4), [14, 14], [81, 15.25]]);
+    row(1.25, [...run(1.25, 15, 0, 13), [28, 13, 2], [29, 15.25]]);
+    row(2.25, [[30, 0, 1.5], ...run(2.25, 31, 1.5, 12), [43, 13.5, 1.5], [44, 15.25]]);
+    row(3.25, [[45, 0, 1.75], ...run(3.25, 46, 1.75, 11), [57, 12.75, 2.25], [80, 15.25]]);
+    row(4.25, [[58, 0, 2.25], ...run(4.25, 59, 2.25, 10), [69, 12.25, 1.75], [70, 14.25]]);
+    row(5.25, [[71, 0, 1.25], [72, 1.25, 1.25], [73, 2.5, 1.25], [74, 3.75, 6.25], [75, 10, 1.25], [76, 11.25, 1.25],
+      [77, 13.25], [78, 14.25], [79, 15.25]]);
+    return g;
+  })();
+
   function keyRect(key) {
-    const r = layout().place[key.id] || (key.rect[2] ? key.rect : [0, 0, 0, 0]);
+    const placed = layout().place[key.id];
+    if (placed) return { x: placed[0], y: placed[1], w: placed[2] - placed[0], h: placed[3] - placed[1] };
+    const cell = GRID[key.id];
+    if (cell) {
+      return {
+        x: ORIGIN[0] + cell[0] * U + GAP / 2,
+        y: ORIGIN[1] + cell[1] * U + GAP / 2,
+        w: cell[2] * U - GAP,
+        h: U - GAP
+      };
+    }
+    const r = key.rect;
     return { x: r[0], y: r[1], w: r[2] - r[0], h: r[3] - r[1] };
   }
 
@@ -788,19 +827,17 @@
     return SHORT[key.id] || key.label;
   }
 
-  /* Line-art case, traced from the retail B75: outer shell, inner bezel,
-     key well, top light bar, badge and vent hatching. */
+  /* Line-art case traced from the retail B75: outer shell, inner bezel, key
+     well and the iLovbee badge (a small rounded-corner plate, top left). */
   function caseArt() {
-    const knob = saved.layout !== "classic";
-    const hatch = Array.from({ length: 9 }, (_, i) =>
-      `<line x1="${(knob ? 700 : 760) + i * 7}" y1="30" x2="${(knob ? 706 : 766) + i * 7}" y2="20"/>`).join("");
     return `<svg class="kb-art" viewBox="0 0 879 399" preserveAspectRatio="none" aria-hidden="true">
       <rect class="art-shell" x="2" y="2" width="875" height="395" rx="30"/>
       <rect class="art-bezel" x="10" y="9" width="859" height="381" rx="24"/>
       <rect class="art-well" x="27" y="45" width="826" height="333" rx="12"/>
-      <rect class="art-bar" x="${knob ? 250 : 300}" y="18" width="${knob ? 300 : 280}" height="9" rx="4.5"/>
-      <g class="art-hatch">${hatch}</g>
-      <text class="art-badge" x="${knob ? 30 : 110}" y="33">iLovbee</text>
+      <g class="art-badge">
+        <rect x="34" y="17" width="66" height="21" rx="5"/>
+        <text x="67" y="31.5" text-anchor="middle">iLovbee</text>
+      </g>
     </svg>`;
   }
 
@@ -973,7 +1010,7 @@
 
   function paintNode(n, c, a) {
     if (!n.el) return;
-    if (!c || a <= 0.02) {
+    if (!c || a <= 0.02 || !lightable(n.key)) {
       n.el.classList.remove("lit");
       n.el.style.removeProperty("--kc");
       return;
@@ -985,8 +1022,8 @@
 
   function buildSnakePath() {
     // Serpentine over the five main rows (top row left to right, next row back).
-    const rows = [57, 121, 172, 223, 274, 325].map((y) => KEYS.filter((k) => k.rect[1] >= y - 2 && k.rect[1] <= y + 2 && k.rect[2] && k.id !== 81)
-      .sort((a, b) => a.rect[0] - b.rect[0]));
+    const rows = [0, 1.25, 2.25, 3.25, 4.25, 5.25].map((r) => KEYS.filter((k) => GRID[k.id] && GRID[k.id][1] === r && k.id !== 81)
+      .sort((a, b) => GRID[a.id][0] - GRID[b.id][0]));
     rows.forEach((row, i) => (i % 2 ? row.slice().reverse() : row).forEach((k) => SNAKE_PATH.push(k.id)));
   }
 
@@ -994,6 +1031,7 @@
     const key = KEY_BY_ID.get(id);
     if (!key) return;
     if (activeTab === "tab-perkey") {
+      if (!lightable(key)) return;
       saved.perKey[key.idx] = paintColor;
       markDirty("keyRgb");
       renderKeyboard();
@@ -1244,7 +1282,11 @@
       const btn = event.target.closest("[data-layout]");
       if (!btn) return;
       saved.layout = btn.dataset.layout;
+      if (layout().hide.includes(selectedKey)) selectedKey = null;
+      const touchesHidden = layout().hide.some((id) => saved.keys[id]);
       store();
+      if (touchesHidden) markDirty("matrix");
+      renderKeyEditor();
       renderLayoutPicker();
       renderKeyboard();
     });
@@ -1319,7 +1361,7 @@
 
     $("inp-paint")?.addEventListener("input", (event) => { paintColor = event.target.value; });
     $("btn-paint-all")?.addEventListener("click", () => {
-      KEYS.forEach((key) => { saved.perKey[key.idx] = paintColor; });
+      KEYS.filter(lightable).forEach((key) => { saved.perKey[key.idx] = paintColor; });
       markDirty("keyRgb");
       renderKeyboard();
     });

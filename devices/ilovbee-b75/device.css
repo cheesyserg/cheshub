@@ -34,26 +34,22 @@
 .art-shell { stroke: var(--line); stroke-width: 1.6; filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.35)); }
 .art-bezel { stroke: var(--line-soft); stroke-width: 1; }
 .art-well { stroke: var(--line-soft); stroke-width: 1; fill: rgba(255, 255, 255, 0.015) !important; }
-.art-bar { stroke: var(--line-soft); stroke-width: 1; }
-.art-hatch line { stroke: var(--line-soft); stroke-width: 1; }
-.art-badge {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 0.6;
-  font: 700 15px "Segoe UI", system-ui, sans-serif;
-  letter-spacing: 0.5px;
+.art-badge rect { stroke: var(--line); stroke-width: 1.2; fill: color-mix(in srgb, var(--text) 8%, transparent) !important; }
+.art-badge text {
+  fill: var(--line);
+  font: 700 10.5px "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.3px;
 }
 
 .kb-key {
   --kc: transparent;
   position: absolute;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
   padding: 0;
+  overflow: hidden;
   border: 1.4px solid var(--line);
-  border-radius: 7px;
-  background: transparent;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(0, 0, 0, 0.18));
   color: var(--text-dim);
   font-size: clamp(6px, 1.05cqw, 10px);
   font-weight: 600;
@@ -61,23 +57,31 @@
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.08s ease;
 }
-/* Keycap top surface, inset like the dish of a real cap. */
+/* Keycap top surface: a dished face set in from the skirt, deeper at the
+   front edge like a real sculpted cap. */
 .kb-key::before {
   content: "";
   position: absolute;
-  inset: 2px 3px 5px;
+  inset: 7% 9% 17%;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
   pointer-events: none;
 }
+/* Legend sits centred on the keycap top (the ::before surface) and never
+   leaves it. */
 .kb-key span {
-  position: relative;
-  margin: max(3px, 0.55cqw) 0 0 max(3px, 0.6cqw);
-  max-width: calc(100% - 4px);
+  position: absolute;
+  inset: 7% 9% 17%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 2px;
+  font-size: clamp(6px, 1.25cqw, 13px);
   letter-spacing: -0.2px;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 .kb-key:hover { border-color: var(--text); color: var(--text); }
 .kb-key:active { transform: translateY(1px); }
@@ -96,8 +100,9 @@
   border-radius: 50%;
   font-size: clamp(7px, 1.2cqw, 12px);
 }
-.kb-key.knob::before { inset: 3px; border-radius: 50%; }
-.kb-key.knob span { margin: 0; }
+.kb-key.knob { background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)); }
+.kb-key.knob::before { inset: 10%; border-radius: 50%; background: none; }
+.kb-key.knob span { inset: 3px; }
 /* The press target of the top-right knob gets knurled edges. */
 .kb-board.layout-knob .kb-key[data-key="82"]::before {
   inset: 4px;
@@ -106,9 +111,13 @@
 .kb-board.layout-knob .kb-key[data-key="82"]::after {
   content: "";
   position: absolute;
-  inset: 30%;
-  border: 1px solid var(--line-soft);
-  border-radius: 50%;
+  top: 18%;
+  left: 50%;
+  width: 1.5px;
+  height: 22%;
+  margin-left: -0.75px;
+  border-radius: 1px;
+  background: var(--line);
 }
 .kb-board.layout-knob .kb-key[data-key="83"],
 .kb-board.layout-knob .kb-key[data-key="84"] { border-style: dashed; }

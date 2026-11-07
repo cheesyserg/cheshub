@@ -79,7 +79,7 @@ with every field marked in
   palette (plus colourful), read back from the keyboard's config block; the
   on-screen keyboard animates an approximation of the selected effect
 - Line-art keyboard with a layout switch: **Knob** (retail B75, rotary knob
-  top right in place of End) or **End key** (the vendor tool's artwork)
+  top right in place of End, keycap-sized) or **End key** (no knob)
 - Per-key colour painting for the Custom effect
 - Base-layer key remapping: keys with modifiers, media, mouse buttons,
   macros or disabled; the knob is included
