@@ -362,7 +362,7 @@
     device = dev;
     if (!device.opened) await device.open();
     const pick = pickCollection(device);
-    if (!pick) throw new Error("this interface has no feature report — pick the vendor interface");
+    if (!pick) throw new Error("this interface can't be configured — use Try Another Interface");
     reportId = pick.reportId;
     featureBytes = pick.bytes || PAYLOAD;
 
@@ -388,7 +388,7 @@
   function hex4(v) { return (v || 0).toString(16).toUpperCase().padStart(4, "0"); }
 
   async function connect(filters = FILTERS) {
-    if (!navigator.hid) { toast("WebHID is not available in this browser"); return; }
+    if (!navigator.hid) { toast("This browser can't connect to USB devices. Use Chrome or Edge."); return; }
     try {
       const picked = await navigator.hid.requestDevice({ filters });
       if (!picked.length) return;
@@ -396,7 +396,7 @@
       toast("Connected to iLovbee B75");
     } catch (err) {
       setDiag("diag-error", err.message, false);
-      toast("Connection failed: " + err.message);
+      toast("Couldn't connect to the keyboard. See Diagnostics for details.");
     }
   }
 
@@ -459,7 +459,7 @@
       if (!quiet) toast("Settings read from keyboard");
     } catch (err) {
       setDiag("diag-error", err.message, false);
-      toast("Read failed: " + err.message);
+      toast("Couldn't read settings from the keyboard.");
     }
   }
 
@@ -695,12 +695,12 @@
       store();
       setDiag("diag-error", "—");
       setSaveState("saved");
-      if (!options.quiet) toast(options.reset ? "Factory reset sent" : "Settings written to keyboard");
+      if (!options.quiet) toast(options.reset ? "Factory settings restored" : "Saved to keyboard");
     } catch (err) {
       Object.keys(todo).forEach((part) => { if (todo[part]) dirty[part] = true; });
       setDiag("diag-error", err.message, false);
       setSaveState("error");
-      toast("Write failed: " + err.message);
+      toast("Couldn't save to the keyboard. Check the cable and try again.");
     } finally {
       renderDirty();
     }
@@ -740,19 +740,9 @@
     renderDirty();
   }
 
-  function renderDirty() {
-    const pending = Object.values(dirty).some(Boolean);
-    const note = $("pending-note");
-    if (!note) return;
-    let text = "";
-    if (!device && pending) text = "Not connected — changes kept";
-    else if (saveState === "saving" || (pending && device)) text = "Saving…";
-    else if (saveState === "error") text = "Write failed — see Diagnostics";
-    else if (saveState === "saved") text = "Saved to keyboard";
-    note.textContent = text;
-    note.hidden = !text;
-    note.dataset.state = saveState === "error" ? "error" : (text === "Saved to keyboard" ? "ok" : "busy");
-  }
+  /* Saves happen in the background; only failures are surfaced (as a toast). */
+  function renderDirty() {}
+
 
   /* ============================================================ keyboard UI */
 
@@ -1051,7 +1041,7 @@
       grid.innerHTML = EFFECTS.map((e) => `
         <button type="button" class="fx-card${e.hw === light.hw ? " active" : ""}" data-hw="${e.hw}">
           <span class="fx-name">${esc(e.name)}</span>
-          <span class="fx-meta">${e.hw === 0 ? "LEDs off" : `effect ${e.hw}${e.color ? " · colour" : ""}${e.speed ? " · speed" : ""}`}</span>
+          <span class="fx-meta">${e.hw === 0 ? "Lights off" : e.hw === CUSTOM_HW ? "Your colours" : [e.color ? "Colour" : "Multicolour", e.speed ? "Speed" : ""].filter(Boolean).join(" · ")}</span>
         </button>`).join("");
     }
     const fx = EFFECTS.find((e) => e.hw === light.hw) || EFFECTS[0];
@@ -1103,7 +1093,6 @@
     box.innerHTML = `
       <div class="key-head">
         <span class="key-chip">${esc(key.label)}</span>
-        <span class="key-meta">matrix ${key.idx} · factory <code>${key.code}</code></span>
       </div>
       <div class="segmented key-types" id="key-type">
         ${[["default", "Default"], ["key", "Key"], ["media", "Media"], ["raw", "Mouse"], ["macro", "Macro"], ["off", "Disable"]]
@@ -1423,7 +1412,7 @@
     });
 
     $("btn-macro-new")?.addEventListener("click", () => {
-      if (saved.macros.length >= MACRO_LIMIT) { toast(`At most ${MACRO_LIMIT} macros`); return; }
+      if (saved.macros.length >= MACRO_LIMIT) { toast(`You can create up to ${MACRO_LIMIT} macros`); return; }
       saved.macros.push({ name: "Macro " + (saved.macros.length + 1), mode: 1, count: 1, events: [] });
       editingMacro = saved.macros.length - 1;
       macroChanged();
