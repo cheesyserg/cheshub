@@ -192,7 +192,7 @@
   let saved = loadStore();
 
   function loadStore() {
-    const base = { keys: {}, macros: [], palettes: {}, perKey: {}, debounce: 0, sleep: 1 };
+    const base = { keys: {}, macros: [], palettes: {}, perKey: {}, debounce: 0, sleep: 1, layout: "knob" };
     try {
       return Object.assign(base, JSON.parse(localStorage.getItem(STORE_KEY) || "{}"));
     } catch (err) {
@@ -664,8 +664,11 @@
         todo.matrix = false;
       }
       if (todo.cfg) {
-        let current;
-        try {
+        // Every byte the studio owns is rebuilt from UI state, so the block read
+        // on connect / Sync is enough to preserve the rest. Skipping the
+        // read-back saves a round trip per lighting change.
+        let current = cfg && cfg[CFG.SIG_A] === 0x5A && cfg[CFG.SIG_B] === 0xA5 ? cfg : null;
+        if (!current) try {
           current = await readCfg();
         } catch (err) {
           // Without a fresh read, patch the last good block (or a blank one)
@@ -701,29 +704,30 @@
 
   /* --------------------------------------------------------- auto-apply */
 
-  const AUTO_DELAY_MS = 450;
+  const AUTO_DELAY_MS = 450;          // keys, macros: let a burst of edits settle
+  const FAST_DELAY_MS = 80;           // lighting: feel immediate
   let autoTimer = null;
   let applying = null;
 
-  function scheduleApply() {
+  function scheduleApply(fast) {
     clearTimeout(autoTimer);
     if (!device) return;
-    autoTimer = setTimeout(runAutoApply, AUTO_DELAY_MS);
+    autoTimer = setTimeout(runAutoApply, fast ? FAST_DELAY_MS : AUTO_DELAY_MS);
   }
 
   async function runAutoApply() {
     if (!device || !Object.values(dirty).some(Boolean)) return;
-    if (recording || applying) { scheduleApply(); return; }
+    if (recording || applying) { scheduleApply(true); return; }
     applying = apply({ quiet: true });
     try { await applying; } finally { applying = null; }
-    if (Object.values(dirty).some(Boolean)) scheduleApply();
+    if (Object.values(dirty).some(Boolean)) scheduleApply(true);
   }
 
   function markDirty(part) {
     dirty[part] = true;
     store();
     renderDirty();
-    scheduleApply();
+    scheduleApply(part === "cfg" || part === "rgbTab");
   }
 
   let saveState = "";
@@ -750,12 +754,54 @@
 
   const KB_W = 879;
   const KB_H = 399;
-  const KNOB = { 82: [44, 2, 70, 28], 83: [14, 2, 40, 28], 84: [74, 2, 100, 28] };
-  const SHORT = { 82: "◉", 83: "−", 84: "+", 29: "Home", 44: "PgUp", 80: "PgDn" };
+  /* Two production layouts share PID 01E7 and the same matrix:
+     - "knob":    rotary knob top right, in place of End (retail B75)
+     - "classic": End key top right, knob controls top left (vendor artwork) */
+  const LAYOUTS = {
+    knob: {
+      name: "Knob",
+      hide: [81],
+      place: { 82: [801, 49, 847, 95], 83: [790, 14, 812, 36], 84: [836, 14, 858, 36] },
+      short: { 83: "↺", 84: "↻", 82: "" }
+    },
+    classic: {
+      name: "End key",
+      hide: [],
+      place: { 82: [48, 14, 70, 36], 83: [22, 14, 44, 36], 84: [74, 14, 96, 36] },
+      short: { 82: "◉", 83: "−", 84: "+" }
+    }
+  };
+  const SHORT = { 29: "Home", 44: "PgUp", 80: "PgDn" };
+
+  function layout() {
+    return LAYOUTS[saved.layout] || LAYOUTS.knob;
+  }
 
   function keyRect(key) {
-    const r = key.rect[2] ? key.rect : (KNOB[key.id] || [0, 0, 0, 0]);
+    const r = layout().place[key.id] || (key.rect[2] ? key.rect : [0, 0, 0, 0]);
     return { x: r[0], y: r[1], w: r[2] - r[0], h: r[3] - r[1] };
+  }
+
+  function keyCaption(key) {
+    const short = layout().short;
+    if (key.id in short) return short[key.id];
+    return SHORT[key.id] || key.label;
+  }
+
+  /* Line-art case, traced from the retail B75: outer shell, inner bezel,
+     key well, top light bar, badge and vent hatching. */
+  function caseArt() {
+    const knob = saved.layout !== "classic";
+    const hatch = Array.from({ length: 9 }, (_, i) =>
+      `<line x1="${(knob ? 700 : 760) + i * 7}" y1="30" x2="${(knob ? 706 : 766) + i * 7}" y2="20"/>`).join("");
+    return `<svg class="kb-art" viewBox="0 0 879 399" preserveAspectRatio="none" aria-hidden="true">
+      <rect class="art-shell" x="2" y="2" width="875" height="395" rx="30"/>
+      <rect class="art-bezel" x="10" y="9" width="859" height="381" rx="24"/>
+      <rect class="art-well" x="27" y="45" width="826" height="333" rx="12"/>
+      <rect class="art-bar" x="${knob ? 250 : 300}" y="18" width="${knob ? 300 : 280}" height="9" rx="4.5"/>
+      <g class="art-hatch">${hatch}</g>
+      <text class="art-badge" x="${knob ? 30 : 110}" y="33">iLovbee</text>
+    </svg>`;
   }
 
   function assignmentLabel(key) {
@@ -775,14 +821,16 @@
   function renderKeyboard() {
     const board = $("kb-board");
     if (!board) return;
-    board.innerHTML = KEYS.map((key) => {
+    const hidden = layout().hide;
+    board.classList.toggle("layout-knob", saved.layout !== "classic");
+    board.innerHTML = caseArt() + KEYS.filter((key) => !hidden.includes(key.id)).map((key) => {
       const r = keyRect(key);
       const a = assignmentLabel(key);
       const style = `left:${(r.x / KB_W) * 100}%;top:${(r.y / KB_H) * 100}%;width:${(r.w / KB_W) * 100}%;height:${(r.h / KB_H) * 100}%;`;
       const cls = ["kb-key", key.rect[2] ? "" : "knob", a ? "remapped" : "", selectedKey === key.id ? "selected" : ""].join(" ");
-      return `<button type="button" class="${cls}" style="${style}" data-key="${key.id}" title="${esc(key.label)}${a ? " → " + esc(a) : ""}"><span>${esc(SHORT[key.id] || key.label)}</span></button>`;
+      return `<button type="button" class="${cls}" style="${style}" data-key="${key.id}" title="${esc(key.label)}${a ? " → " + esc(a) : ""}"><span>${esc(keyCaption(key))}</span></button>`;
     }).join("");
-    preview.nodes = KEYS.map((key) => {
+    preview.nodes = KEYS.filter((key) => !hidden.includes(key.id)).map((key) => {
       const r = keyRect(key);
       return {
         key,
@@ -937,7 +985,7 @@
 
   function buildSnakePath() {
     // Serpentine over the five main rows (top row left to right, next row back).
-    const rows = [57, 121, 172, 223, 274, 325].map((y) => KEYS.filter((k) => k.rect[1] >= y - 2 && k.rect[1] <= y + 2 && k.rect[2])
+    const rows = [57, 121, 172, 223, 274, 325].map((y) => KEYS.filter((k) => k.rect[1] >= y - 2 && k.rect[1] <= y + 2 && k.rect[2] && k.id !== 81)
       .sort((a, b) => a.rect[0] - b.rect[0]));
     rows.forEach((row, i) => (i % 2 ? row.slice().reverse() : row).forEach((k) => SNAKE_PATH.push(k.id)));
   }
@@ -1168,7 +1216,15 @@
     }).join("");
   }
 
+  function renderLayoutPicker() {
+    const seg = $("seg-layout");
+    if (!seg) return;
+    seg.innerHTML = Object.entries(LAYOUTS).map(([id, l]) =>
+      `<button type="button" class="seg-btn${(saved.layout || "knob") === id ? " active" : ""}" data-layout="${id}">${l.name}</button>`).join("");
+  }
+
   function renderAll() {
+    renderLayoutPicker();
     renderLighting();
     renderKeyboard();
     renderKeyEditor();
@@ -1183,6 +1239,15 @@
     $("btn-connect")?.addEventListener("click", () => apply({ all: true }));
     $("btn-lock-connect")?.addEventListener("click", () => connect());
     $("btn-sync")?.addEventListener("click", () => sync(false));
+
+    $("seg-layout")?.addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-layout]");
+      if (!btn) return;
+      saved.layout = btn.dataset.layout;
+      store();
+      renderLayoutPicker();
+      renderKeyboard();
+    });
 
     $("kb-board")?.addEventListener("pointerover", (event) => {
       const btn = event.target.closest("[data-key]");

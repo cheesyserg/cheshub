@@ -11,55 +11,110 @@
   padding: 18px 8px 6px;
 }
 
-/* Key rectangles come from the vendor's 879 x 399 layout. */
+/* Line-art keyboard. Key rectangles come from the vendor's 879 x 399 layout;
+   the case is an SVG drawn underneath. */
 .kb-board {
+  --line: color-mix(in srgb, var(--text) 62%, transparent);
+  --line-soft: color-mix(in srgb, var(--text) 26%, transparent);
   position: relative;
   width: 100%;
   aspect-ratio: 879 / 399;
-  border-radius: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
-    rgba(18, 18, 21, 0.72);
-  border: 1px solid var(--border-strong);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 40px rgba(0, 0, 0, 0.35);
   container-type: inline-size;
+}
+
+.kb-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.kb-art rect, .kb-art line { fill: none; vector-effect: non-scaling-stroke; }
+.art-shell { stroke: var(--line); stroke-width: 1.6; filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.35)); }
+.art-bezel { stroke: var(--line-soft); stroke-width: 1; }
+.art-well { stroke: var(--line-soft); stroke-width: 1; fill: rgba(255, 255, 255, 0.015) !important; }
+.art-bar { stroke: var(--line-soft); stroke-width: 1; }
+.art-hatch line { stroke: var(--line-soft); stroke-width: 1; }
+.art-badge {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 0.6;
+  font: 700 15px "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.5px;
 }
 
 .kb-key {
   --kc: transparent;
   position: absolute;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 2px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  background: linear-gradient(180deg, #2c2c31, #222226);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+  border: 1.4px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
   color: var(--text-dim);
-  font-size: clamp(6px, 1.1cqw, 10px);
+  font-size: clamp(6px, 1.05cqw, 10px);
   font-weight: 600;
   line-height: 1;
   cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.15s ease, transform 0.08s ease, box-shadow 0.2s ease;
-}
-.kb-key span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.kb-key:hover { border-color: var(--border-strong); color: var(--text); }
-.kb-key:active { transform: translateY(1px); }
-
-/* --kc is set every frame by the lighting preview (colour + intensity as alpha). */
-.kb-key.lit {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--kc) 26%, transparent), transparent 70%),
-    linear-gradient(180deg, #2c2c31, #222226);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 12px -2px var(--kc), inset 0 -4px 9px -4px var(--kc);
-  border-color: color-mix(in srgb, var(--kc) 60%, rgba(255, 255, 255, 0.1));
-  color: var(--text);
   transition: border-color 0.15s ease, transform 0.08s ease;
 }
+/* Keycap top surface, inset like the dish of a real cap. */
+.kb-key::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px 5px;
+  border: 1px solid var(--line-soft);
+  border-radius: 5px;
+  pointer-events: none;
+}
+.kb-key span {
+  position: relative;
+  margin: max(3px, 0.55cqw) 0 0 max(3px, 0.6cqw);
+  max-width: calc(100% - 4px);
+  letter-spacing: -0.2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kb-key:hover { border-color: var(--text); color: var(--text); }
+.kb-key:active { transform: translateY(1px); }
 
-.kb-key.knob { border-radius: 50%; font-size: clamp(6px, 0.9cqw, 9px); }
+/* --kc is set every frame by the lighting preview (colour + intensity as
+   alpha). Light bleeds out between the caps, like the real underglow. */
+.kb-key.lit {
+  border-color: color-mix(in srgb, var(--kc) 70%, var(--line));
+  box-shadow: 0 0 11px 0 var(--kc), inset 0 0 9px -3px var(--kc);
+  color: var(--text);
+}
+
+.kb-key.knob {
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: clamp(7px, 1.2cqw, 12px);
+}
+.kb-key.knob::before { inset: 3px; border-radius: 50%; }
+.kb-key.knob span { margin: 0; }
+/* The press target of the top-right knob gets knurled edges. */
+.kb-board.layout-knob .kb-key[data-key="82"]::before {
+  inset: 4px;
+  border: 1px dashed var(--line-soft);
+}
+.kb-board.layout-knob .kb-key[data-key="82"]::after {
+  content: "";
+  position: absolute;
+  inset: 30%;
+  border: 1px solid var(--line-soft);
+  border-radius: 50%;
+}
+.kb-board.layout-knob .kb-key[data-key="83"],
+.kb-board.layout-knob .kb-key[data-key="84"] { border-style: dashed; }
+
+.layout-label { align-self: center; font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; }
+.small-seg .seg-btn { padding: 5px 11px; font-size: 12px; }
 
 .kb-key.remapped::after {
   content: "";
@@ -76,6 +131,7 @@
   border-color: var(--accent);
   color: var(--text);
   outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
 }
 
 /* ------------------------------------------------------------ lighting */
