@@ -769,32 +769,63 @@
      writes it back — so values are adopted only when they look valid. A zero
      brightness byte means "never written", not "off"; trusting it would make
      every effect write brightness 0 and leave the keyboard dark. */
+  /* Brightness may come back on the vendor scale (0/5/10/15/20) or, after an
+     Fn hotkey, on whatever scale the firmware uses — map to the nearest of
+     the five levels instead of dropping unknown values. */
+  function brightIndex(v) {
+    const exact = LIGHT_HW.indexOf(v);
+    if (exact >= 0) return exact;
+    const top = LIGHT_HW[LIGHT_HW.length - 1];
+    const scale = v <= top ? top : (v <= 100 ? 100 : 255);
+    return Math.max(0, Math.min(LIGHT_HW.length - 1, Math.round((v / scale) * (LIGHT_HW.length - 1))));
+  }
+
+  let prevBlock = null;
+
   function decodeCfg(block) {
     const notes = [];
     const fx = EFFECTS.find((e) => e.hw === block[CFG.MODE]);
     if (fx) light.hw = fx.hw;
     else notes.push(`mode 0x${block[CFG.MODE].toString(16)} unknown`);
+
+    // A table that was never written is all zeros; then 0 means "unset", not
+    // "off". Once anything is in it, 0 really is brightness off.
+    const tableLive = EFFECTS.some((e) => e.hw && (block[CFG.MODE_TABLE + e.hw * 2] || block[CFG.MODE_TABLE + e.hw * 2 + 1]));
+    const changed = (i) => !prevBlock || prevBlock[i] !== block[i];
+
     EFFECTS.forEach((e) => {
       if (!e.hw) return;
       const b = block[CFG.MODE_TABLE + e.hw * 2];
       const sc = block[CFG.MODE_TABLE + e.hw * 2 + 1];
       const state = light.effects[e.hw];
-      const bi = LIGHT_HW.indexOf(b);
-      if (bi > 0) state.bright = bi;
-      if (b === 0 && sc === 0) return;       // slot never written
+      if (b || tableLive) state.bright = brightIndex(b);
+      if (b === 0 && sc === 0 && !tableLive) return;
       if ((sc >> 4) <= SPEED_MAX) state.speed = sc >> 4;
       const slot = sc & 0x0F;
       if (slot === COLORFUL) state.colorful = true;
       else if (slot < 7) { state.colorful = false; state.slot = slot; }
     });
+
+    // The active effect also has its own brightness / speed bytes. Hotkeys may
+    // update either copy; whichever changed since the last read wins.
     const cur = light.effects[light.hw];
-    const curBright = LIGHT_HW.indexOf(block[CFG.BRIGHT]);
-    if (cur && curBright > 0) cur.bright = curBright;
+    if (cur && light.hw) {
+      const tb = CFG.MODE_TABLE + light.hw * 2;
+      const activeBright = block[CFG.BRIGHT];
+      // First read: trust the active byte. Later reads: the copy that moved.
+      const pickActive = (activeIdx, tableIdx) => !prevBlock || (changed(activeIdx) && !changed(tableIdx));
+      if ((activeBright || tableLive) && pickActive(CFG.BRIGHT, tb)) cur.bright = brightIndex(activeBright);
+      const activeSpeed = block[CFG.SPEED];
+      if (tableLive && activeSpeed <= SPEED_MAX && pickActive(CFG.SPEED, tb + 1)) cur.speed = activeSpeed;
+    }
+    prevBlock = new Uint8Array(block);
+
     const deb = DEBOUNCE.findIndex((d) => d.hw === block[CFG.DEBOUNCE_A]);
     if (deb >= 0) saved.debounce = deb;
     const sl = SLEEP.findIndex((s) => s.hw === block[CFG.SLEEP]);
     if (sl >= 0) saved.sleep = sl;
-    setDiag("diag-decode", `effect ${light.hw}, brightness ${cur ? cur.bright : "-"}, speed ${cur ? cur.speed : "-"}${notes.length ? " · " + notes.join(", ") : ""}`, !notes.length);
+    const raw = light.hw ? ` (raw: active ${block[CFG.BRIGHT]}, effect ${block[CFG.MODE_TABLE + light.hw * 2]}, speed ${block[CFG.SPEED]}/${block[CFG.MODE_TABLE + light.hw * 2 + 1] >> 4})` : "";
+    setDiag("diag-decode", `effect ${light.hw}, brightness ${cur ? cur.bright : "-"}, speed ${cur ? cur.speed : "-"}${raw}${notes.length ? " · " + notes.join(", ") : ""}`, !notes.length);
   }
 
   /* FillCfg_LowDaly (Fw=2): only the bytes the vendor tool owns are touched. */
@@ -972,6 +1003,7 @@
         }
         cfg = encodeCfg(current, options);
         await write(CMD.SET_CFG, 0, cfg);
+        prevBlock = new Uint8Array(cfg);
         todo.cfg = false;
       }
       if (todo.rgbTab) {
