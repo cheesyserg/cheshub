@@ -105,6 +105,50 @@ The hosted site is served over HTTPS by GitHub Pages, so
 Opening it in a browser without WebHID or Web Serial shows a blocking notice
 instead of a half-working UI.
 
+### Linux: udev rules
+
+On Linux the browser opens `/dev/hidraw*` directly, and those nodes are
+root-only by default. Without a rule the device either does not appear in the
+picker or fails with `Failed to open the device`. Create
+`/etc/udev/rules.d/70-cheshub.rules`:
+
+```
+# ChesHub — WebHID access for supported devices
+# TECKNET TK-GM012 (USB cable)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="248a", ATTRS{idProduct}=="5d2e", MODE="0660", TAG+="uaccess"
+# TECKNET TK-GM012 (2.4 GHz receiver)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="249a", ATTRS{idProduct}=="5c2f", MODE="0660", TAG+="uaccess"
+# AJAZZ AJ139 V2 MC (USB cable)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a4", ATTRS{idProduct}=="2255", MODE="0660", TAG+="uaccess"
+# AJAZZ AJ139 V2 MC (2.4 GHz receiver)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a5", ATTRS{idProduct}=="2255", MODE="0660", TAG+="uaccess"
+# iLovbee B75 (USB cable)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01e7", MODE="0660", TAG+="uaccess"
+```
+
+Then reload the rules and re-plug the device (or its receiver):
+
+```bash
+sudo udevadm control --reload-rules
+```
+
+```bash
+sudo udevadm trigger --subsystem-match=hidraw
+```
+
+`TAG+="uaccess"` gives the logged-in desktop user access through systemd-logind.
+On a system without logind, replace it with `GROUP="plugdev"` and add yourself to
+that group. To check which node a device got and who can open it:
+
+```bash
+ls -l /dev/hidraw*
+```
+
+The TOZO HT3 needs no udev rule: Chrome reaches it through BlueZ, so pair it
+in the system Bluetooth settings first. If you instead bind it to
+`/dev/rfcomm0` yourself, your user must be in the `dialout` group
+(`uucp` on Arch).
+
 ## Usage
 
 1. Open the [hub](https://cheesyserg.github.io/cheshub/) and choose the device.
@@ -206,8 +250,8 @@ Pushing to `main` deploys the repository root to GitHub Pages via
 
 **The device never shows up in the browser prompt**
 The vendor utility is probably holding the handle. Quit it completely (tray
-icon included) and reload. On Linux, check `lsusb` and that nothing like
-`libratbag` grabbed the device.
+icon included) and reload. On Linux, install the [udev rules](#linux-udev-rules),
+check `lsusb`, and make sure nothing like `libratbag` grabbed the device.
 
 If it still does not appear, the registry filter may be too narrow for your
 board revision. Use **Scan Vendor HID** on the hub (or **Scan Any Vendor
