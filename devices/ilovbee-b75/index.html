@@ -8,7 +8,7 @@
   <title>ChesHub | iLovbee B75 Studio</title>
   <link rel="stylesheet" href="../../assets/css/base.css">
   <link rel="stylesheet" href="../../assets/css/studio.css">
-  <link rel="stylesheet" href="device.css?v=20261107j">
+  <link rel="stylesheet" href="device.css?v=20261107k">
   <script src="../../assets/js/theme.js"></script>
 </head>
 <body data-device="ilovbee-b75">
@@ -255,8 +255,8 @@
                 <button class="btn-ghost" id="btn-copy-diag" type="button">Copy Diagnostics</button>
               </div>
               <p class="section-note">Close the iLovbee app before connecting — only one program can talk to the keyboard
-                at a time. Connect the keyboard with its USB cable; the 2.4 GHz receiver and Bluetooth
-                are not supported.</p>
+                at a time. Works over the USB cable and the 2.4 GHz receiver; wake the keyboard with a
+                key press before connecting wirelessly. Bluetooth is experimental.</p>
             </div>
           </div>
 
@@ -270,8 +270,8 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 01-6 6 6 6 0 01-6-6V8zM12 18v4"/></svg>
         </div>
         <div class="lock-title">Device not connected</div>
-        <p class="lock-text">Plug the B75 in with the USB cable and connect it to configure lighting,
-          keys and macros.</p>
+        <p class="lock-text">Plug in the B75 with its USB cable or 2.4 GHz receiver, then connect to configure
+          lighting, keys and macros.</p>
         <div class="lock-actions">
           <button class="btn-primary" id="btn-lock-connect" type="button">Connect</button>
           <button class="btn-ghost" type="button" onclick="switchTab('tab-diagnostics')">Diagnostics</button>
@@ -284,7 +284,7 @@
   <div id="toast-container"></div>
   <script src="../../assets/js/devices.js"></script>
   <script src="../../assets/js/studio.js"></script>
-  <script src="keymap.js?v=20261107j"></script>
-  <script src="driver.js?v=20261107j"></script>
+  <script src="keymap.js?v=20261107k"></script>
+  <script src="driver.js?v=20261107k"></script>
 </body>
 </html>

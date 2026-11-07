@@ -26,6 +26,7 @@ function connectionLabel(entry, device) {
   if (entry.id === "tozo-ht3") return "Bluetooth";
   if (entry.id === "tecknet-tk-gm012") return device && device.vendorId === 0x249A ? "2.4 GHz" : "USB";
   if (entry.id === "ajazz-aj139") return device && device.vendorId === 0xA8A5 ? "2.4 GHz" : "USB";
+  if (entry.id === "ilovbee-b75") return device && device.productId === 0x01BB ? "2.4 GHz" : "USB";
   return "USB";
 }
 
@@ -210,6 +211,7 @@ function readAjazz(device) {
 /* iLovbee B75: GetPower (0x87) over the 0x208-byte feature report.
    Byte 0 of the reply data is read as the level (inferred, see PROTOCOL.md). */
 async function readB75(device) {
+  if (device.productId === 0x01BB) return readB75Wireless(device);
   const col = (device.collections || []).find((c) => c.usagePage >= 0xFF00 && (c.featureReports || []).length);
   if (!col) return null;
   const rid = col.featureReports[0].reportId;
@@ -227,6 +229,33 @@ async function readB75(device) {
   } catch (err) {
     return null;
   }
+}
+
+/* B75 behind its 2.4 GHz receiver: 20-byte report 0x13, battery cmd 0x4A. */
+function readB75Wireless(device) {
+  return new Promise((resolve) => {
+    let timer = null;
+    const finish = (value) => {
+      clearTimeout(timer);
+      device.removeEventListener("inputreport", onReport);
+      resolve(value);
+    };
+    const onReport = (event) => {
+      if (event.reportId !== 0x13) return;
+      const d = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+      if ((d[0] & 0x7F) !== 0x4A) return;
+      const level = d[4];
+      finish(level <= 100 ? { battery: level, charging: !!d[5] } : null);
+    };
+    device.addEventListener("inputreport", onReport);
+    timer = setTimeout(() => finish(null), 1500);
+    const b = new Uint8Array(20);
+    b[0] = 0x13; b[1] = 0x4A; b[2] = 1;
+    let sum = 0;
+    for (let i = 0; i < 19; i++) sum += b[i];
+    b[19] = sum & 0xFF;
+    device.sendReport(0x13, b.subarray(1)).catch(() => finish(null));
+  });
 }
 
 function readBattery(entry, device) {

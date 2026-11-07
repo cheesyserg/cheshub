@@ -11,10 +11,36 @@
 
   const VID = 0x258A;
   const PID = 0x01E7;
+  const DONGLE_PID = 0x01BB;           // "2.4G Wireless Receiver"
   const FILTERS = [
     { vendorId: VID, productId: PID, usagePage: 0xFF00 },
-    { vendorId: VID, productId: PID, usagePage: 0xFF02 }
+    { vendorId: VID, productId: PID, usagePage: 0xFF02 },
+    { vendorId: VID, productId: DONGLE_PID, usagePage: 0xFF02, usage: 0x02 },
+    // Bluetooth: same vendor channel as the receiver if the firmware exposes it.
+    { vendorId: VID, usagePage: 0xFF02, usage: 0x02 }
   ];
+
+  /* Wireless link (receiver, and Bluetooth when exposed): CDev3632. 20-byte
+     output/input reports with id 0x13 on usage page 0xFF02 / usage 2:
+       [13, cmd, packets, index, sub<<4 | len, data x14, checksum]
+     checksum = sum of the first 19 bytes. Each packet is acknowledged by an
+     input report echoing the command. */
+  const WL_REPORT = 0x13;
+  const WL_CHUNK = 14;
+  const WL_GAP_MS = 15;
+  const WL_TIMEOUT_MS = 4000;
+  const WL_PAGE = 0x200;               // macros go out in 512-byte pages (sub = page)
+  const WL_CMD = {                     // wired command -> wireless command
+    0x03: 0x01,                        // key matrix, sub = layer
+    0x06: 0x02,                        // per-key colour, sub = group
+    0x05: 0x03,                        // macro buffer, sub = page
+    0x04: 0x04,                        // config block
+    0x0A: 0x09,                        // colour table
+    0x82: 0x05,                        // pairing id (6 bytes)
+    0x84: 0x44,                        // config read
+    0x87: 0x4A                         // battery read
+  };
+  const WL_ONLINE = 0x07;              // 1 byte: keyboard awake and linked
 
   const REPORT_BYTES = 0x208;          // HidP caps FeatureReportByteLength, incl. report id
   const PAYLOAD = REPORT_BYTES - 1;    // what WebHID sends after the report id
@@ -319,8 +345,124 @@
     return bytes.subarray(off);
   }
 
+  /* ------------------------------------------------- wireless transport */
+
+  let link = "wired";                  // "wired" | "wireless"
+  let wlWaiters = [];
+
+  function onInputReport(event) {
+    if (link !== "wireless") return;
+    const data = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+    const bytes = new Uint8Array(data.length + 1);
+    bytes[0] = event.reportId;
+    bytes.set(data, 1);
+    if (event.reportId !== WL_REPORT && event.reportId !== 0xFF) return;
+    log("<<", bytes);
+    wlWaiters = wlWaiters.filter((w) => !w(bytes));
+  }
+
+  function wlFrame(cmd, total, index, sub, chunk) {
+    const b = new Uint8Array(20);
+    b[0] = WL_REPORT;
+    b[1] = cmd;
+    b[2] = total;
+    b[3] = index;
+    b[4] = ((sub & 0x0F) << 4) | (chunk.length & 0x0F);
+    b.set(chunk.subarray(0, WL_CHUNK), 5);
+    let sum = 0;
+    for (let i = 0; i < 19; i++) sum += b[i];
+    b[19] = sum & 0xFF;
+    return b;
+  }
+
+  /* Resolves with the next report for `cmd`; accept() may consume several. */
+  function wlWait(cmd, accept, timeout) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        wlWaiters = wlWaiters.filter((w) => w !== waiter);
+        reject(new Error("keyboard did not answer — is it awake?"));
+      }, timeout);
+      const waiter = (b) => {
+        if (b[0] === 0xFF) { clearTimeout(timer); reject(new Error("receiver reported an error")); return true; }
+        if ((b[1] & 0x7F) !== cmd) return false;
+        const done = accept(b);
+        if (done === undefined) return false;
+        clearTimeout(timer);
+        if (done instanceof Error) reject(done); else resolve(done);
+        return true;
+      };
+      wlWaiters.push(waiter);
+    });
+  }
+
+  async function wlSend(b) {
+    log(">> 13", b.subarray(1));
+    await device.sendReport(WL_REPORT, b.subarray(1));
+  }
+
+  /* CDev3632::AccessData: 14-byte packets, each acknowledged. */
+  async function wlWriteBlock(cmd, sub, bytes) {
+    const total = Math.max(1, Math.ceil(bytes.length / WL_CHUNK));
+    for (let i = 0; i < total; i++) {
+      const frameBytes = wlFrame(cmd, total, i, sub, bytes.subarray(i * WL_CHUNK, (i + 1) * WL_CHUNK));
+      for (let attempt = 0; ; attempt++) {
+        await sleep(WL_GAP_MS);
+        const ack = wlWait(cmd, (b) => (b[2] & 0x80 ? "retry" : "ok"), WL_TIMEOUT_MS);
+        await wlSend(frameBytes);
+        const result = await ack;
+        if (result === "ok") break;
+        if (attempt >= 5) throw new Error("keyboard kept asking for a resend");
+      }
+    }
+  }
+
+  async function wlWrite(wiredCmd, sub, bytes) {
+    const cmd = WL_CMD[wiredCmd];
+    if (cmd === undefined) throw new Error("not available over wireless");
+    if (cmd === 0x03) {
+      // Macro buffer: one AccessData per 512-byte page, sub = page index.
+      const pages = Math.max(1, Math.ceil(bytes.length / WL_PAGE));
+      for (let page = 0; page < pages; page++) {
+        await wlWriteBlock(cmd, page, bytes.subarray(page * WL_PAGE, (page + 1) * WL_PAGE));
+        await sleep(100);
+      }
+      return;
+    }
+    await wlWriteBlock(cmd, sub, bytes);
+  }
+
+  /* Read: one request, then reply packets until index == packets - 1. */
+  async function wlRead(cmd, length) {
+    const out = new Uint8Array(length);
+    let filled = 0;
+    const seen = new Set();
+    const done = wlWait(cmd, (b) => {
+      if (b[1] & 0x80) return new Error("keyboard rejected the request");
+      const total = b[2] & 0x7F;
+      const index = b[3];
+      if (!seen.has(index)) {
+        seen.add(index);
+        const n = Math.min(b[4] & 0x0F, WL_CHUNK, length - index * WL_CHUNK);
+        if (n > 0) out.set(b.subarray(5, 5 + n), index * WL_CHUNK);
+        filled += Math.max(0, n);
+      }
+      return index >= total - 1 ? out : undefined;
+    }, 3000);
+    const req = wlFrame(cmd, 1, 0, 0, new Uint8Array(0));
+    await wlSend(req);
+    return done;
+  }
+
   /* CDevG5KB::AccessData (write) */
   function write(cmd, sub, data, gap = PACKET_GAP_MS) {
+    if (link === "wireless") {
+      return exclusive(async () => {
+        if (!device || !device.opened) throw new Error("not connected");
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        await wlWrite(cmd, sub, bytes);
+        setDiag("diag-last", `0x${(WL_CMD[cmd] || cmd).toString(16).padStart(2, "0")} write ${bytes.length} B (wireless)`, true);
+      });
+    }
     return exclusive(async () => {
       if (!device || !device.opened) throw new Error("not connected");
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -335,6 +477,15 @@
 
   /* GetLED / GetPower / GetPassword: one request frame, then a feature read. */
   function read(cmd, sub, length) {
+    if (link === "wireless") {
+      return exclusive(async () => {
+        if (!device || !device.opened) throw new Error("not connected");
+        const wl = WL_CMD[cmd] !== undefined ? WL_CMD[cmd] : cmd;
+        const out = await wlRead(wl, length);
+        setDiag("diag-last", `0x${wl.toString(16).padStart(2, "0")} read ${length} B (wireless)`, true);
+        return out;
+      });
+    }
     return exclusive(async () => {
       if (!device || !device.opened) throw new Error("not connected");
       const out = new Uint8Array(length);
@@ -361,19 +512,46 @@
   async function attach(dev) {
     device = dev;
     if (!device.opened) await device.open();
-    const pick = pickCollection(device);
-    if (!pick) throw new Error("this interface can't be configured — use Try Another Interface");
-    reportId = pick.reportId;
-    featureBytes = pick.bytes || PAYLOAD;
-
     setDiag("diag-product", device.productName || "—");
     setDiag("diag-ids", `${hex4(device.vendorId)} : ${hex4(device.productId)}`);
-    setDiag("diag-interface",
-      `usage page 0x${hex4(pick.col.usagePage)} / 0x${hex4(pick.col.usage)}, report 0x${reportId.toString(16).padStart(2, "0")}, ${featureBytes + 1} B`,
-      featureBytes === PAYLOAD);
     renderCollections();
 
-    updateHud(true);
+    if (isWireless(device)) {
+      link = "wireless";
+      device.removeEventListener("inputreport", onInputReport);
+      device.addEventListener("inputreport", onInputReport);
+      setDiag("diag-interface", "wireless channel, usage page 0xFF02 / 0x0002, report 0x13", true);
+      updateHud(true);
+      let awake = true;
+      try {
+        const st = await read(WL_ONLINE, 0, 1);
+        awake = st[0] !== 0;
+      } catch (err) { /* older receivers may not answer; carry on */ }
+      if (!awake) {
+        toast("Keyboard is asleep — press any key on it, then press Sync.");
+        return;
+      }
+      // KB.ini Psd=a,0,0,0,0,12 identifies the B75 behind a receiver.
+      try {
+        const psd = await read(CMD.GET_PSD, 1, 6);
+        setDiag("diag-psd", hex(psd), true);
+        const b75 = [0x0A, 0, 0, 0, 0, 0x12];
+        if (!b75.every((v, i) => psd[i] === v)) {
+          toast("This receiver is paired with a different iLovbee keyboard.");
+        }
+      } catch (err) { setDiag("diag-psd", err.message, false); }
+    } else {
+      link = "wired";
+      const pick = pickCollection(device);
+      if (!pick) throw new Error("this interface can't be configured — use Try Another Interface");
+      reportId = pick.reportId;
+      featureBytes = pick.bytes || PAYLOAD;
+      setDiag("diag-interface",
+        `usage page 0x${hex4(pick.col.usagePage)} / 0x${hex4(pick.col.usage)}, report 0x${reportId.toString(16).padStart(2, "0")}, ${featureBytes + 1} B`,
+        featureBytes === PAYLOAD);
+      updateHud(true);
+    }
+
     await sync(true);
     // Layers written by older builds carried modifiers as E0-E7 usages,
     // which the firmware drops; rewrite the base layer once to repair them.
@@ -383,6 +561,24 @@
       store();
     }
     if (Object.values(dirty).some(Boolean)) scheduleApply();
+  }
+
+  /* The receiver (and a Bluetooth link) carries the 0x13 report on
+     0xFF02 / usage 2; the wired board uses the 0x208 feature report. */
+  function wirelessCollection(dev) {
+    return (dev.collections || []).find((c) => c.usagePage === 0xFF02 && c.usage === 0x02
+      && (c.outputReports || []).some((r) => r.reportId === WL_REPORT));
+  }
+
+  function isWireless(dev) {
+    if (dev.productId === PID) return false;
+    return !!wirelessCollection(dev) || dev.productId === DONGLE_PID;
+  }
+
+  function linkLabel() {
+    if (!device) return "None";
+    if (link === "wired") return "USB Wired";
+    return device.productId === DONGLE_PID || /receiver|dongle/i.test(device.productName || "") ? "2.4 GHz" : "Bluetooth";
   }
 
   function hex4(v) { return (v || 0).toString(16).toUpperCase().padStart(4, "0"); }
@@ -404,7 +600,8 @@
     if (!navigator.hid) return;
     try {
       const granted = await navigator.hid.getDevices();
-      const match = granted.find((dev) => dev.vendorId === VID && dev.productId === PID && pickCollection(dev));
+      const match = granted.find((dev) => dev.vendorId === VID && dev.productId === PID && pickCollection(dev))
+        || granted.find((dev) => dev.vendorId === VID && isWireless(dev));
       if (match) await attach(match);
     } catch (err) {
       setDiag("diag-error", err.message, false);
@@ -415,7 +612,7 @@
     if (window.ChesHub) window.ChesHub.setConnected(connected);
     if (window.ChesHubRegistry) {
       window.ChesHubRegistry.saveTelemetry(document.body.dataset.device, {
-        battery: connected ? battery : null, charging, mode: connected ? "USB Wired" : null
+        battery: connected ? battery : null, charging, mode: connected ? linkLabel() : null
       });
     }
     const text = $("hud-battery-text");
@@ -423,7 +620,7 @@
     if (text) text.textContent = !connected ? "--%" : (battery === null ? "n/a" : `${battery}%${charging ? " ⚡" : ""}`);
     if (bar) bar.style.width = connected && battery !== null ? `${Math.max(0, Math.min(100, battery))}%` : "0%";
     const mode = $("hud-mode");
-    if (mode) mode.textContent = connected ? "USB Wired" : "None";
+    if (mode) mode.textContent = connected ? linkLabel() : "None";
   }
 
   navigator.hid?.addEventListener("disconnect", (event) => {
