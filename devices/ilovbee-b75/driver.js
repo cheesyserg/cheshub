@@ -1398,20 +1398,19 @@
           a = 0.04 + 0.96 * (0.5 - 0.5 * Math.cos(t * 2.4));
           break;
         case 3: c = hsl(t * 70); break;
-        case 4: { // Flash Away: the pressed key fires a trail left and right along its row
+        case 4: { // Flash Away: the pressed key's row fills outward, then the row fades
           let best = 0;
-          let hue = 0;
           preview.drops.forEach((d) => {
             if (Math.abs(n.y - d.y) > 0.05) return;
             const age = (now - d.t0) / 1000 * rate;
-            const front = age * 0.9;
+            const speed = 1.6;                                   // row widths per unit time
             const off = Math.abs(n.x - d.x);
-            let v = 0;
-            if (off <= front && front - off < 0.32) v = (1 - (front - off) / 0.32) * Math.max(0, 1 - front / 1.0);
-            if (off < 0.02) v = Math.max(v, Math.max(0, 1 - age * 1.6));
-            if (v > best) { best = v; hue = d.hue; }
+            if (off > age * speed) return;                       // fill has not reached it yet
+            const filled = Math.max(d.x, 1 - d.x) / speed;       // whole row lit
+            const v = age <= filled ? 1 : Math.max(0, 1 - (age - filled) / 0.7);
+            if (v > best) best = v;
           });
-          c = pick(hue);
+          c = fixed || hsl(keyHue(id, 0));                       // RGB: per-key colours, as Steady
           a = best;
           break;
         }
