@@ -463,25 +463,36 @@
     }
   }
 
+  /* The vendor tool never loads its UI from this block — it only patches and
+     writes it back — so values are adopted only when they look valid. A zero
+     brightness byte means "never written", not "off"; trusting it would make
+     every effect write brightness 0 and leave the keyboard dark. */
   function decodeCfg(block) {
+    const notes = [];
     const fx = EFFECTS.find((e) => e.hw === block[CFG.MODE]);
-    light.hw = fx ? fx.hw : light.hw;
+    if (fx) light.hw = fx.hw;
+    else notes.push(`mode 0x${block[CFG.MODE].toString(16)} unknown`);
     EFFECTS.forEach((e) => {
       if (!e.hw) return;
       const b = block[CFG.MODE_TABLE + e.hw * 2];
       const sc = block[CFG.MODE_TABLE + e.hw * 2 + 1];
       const state = light.effects[e.hw];
       const bi = LIGHT_HW.indexOf(b);
-      if (bi >= 0) state.bright = bi;
-      state.speed = Math.min(SPEED_MAX, sc >> 4);
+      if (bi > 0) state.bright = bi;
+      if (b === 0 && sc === 0) return;       // slot never written
+      if ((sc >> 4) <= SPEED_MAX) state.speed = sc >> 4;
       const slot = sc & 0x0F;
-      state.colorful = slot === COLORFUL;
-      if (slot < 7) state.slot = slot;
+      if (slot === COLORFUL) state.colorful = true;
+      else if (slot < 7) { state.colorful = false; state.slot = slot; }
     });
+    const cur = light.effects[light.hw];
+    const curBright = LIGHT_HW.indexOf(block[CFG.BRIGHT]);
+    if (cur && curBright > 0) cur.bright = curBright;
     const deb = DEBOUNCE.findIndex((d) => d.hw === block[CFG.DEBOUNCE_A]);
     if (deb >= 0) saved.debounce = deb;
     const sl = SLEEP.findIndex((s) => s.hw === block[CFG.SLEEP]);
     if (sl >= 0) saved.sleep = sl;
+    setDiag("diag-decode", `effect ${light.hw}, brightness ${cur ? cur.bright : "-"}, speed ${cur ? cur.speed : "-"}${notes.length ? " · " + notes.join(", ") : ""}`, !notes.length);
   }
 
   /* FillCfg_LowDaly (Fw=2): only the bytes the vendor tool owns are touched. */
@@ -627,7 +638,15 @@
         todo.matrix = false;
       }
       if (todo.cfg) {
-        const current = await readCfg();
+        let current;
+        try {
+          current = await readCfg();
+        } catch (err) {
+          // Without a fresh read, patch the last good block (or a blank one)
+          // rather than dropping the change.
+          setDiag("diag-error", "config read failed, writing anyway: " + err.message, false);
+          current = cfg || new Uint8Array(CFG_LEN);
+        }
         cfg = encodeCfg(current, options);
         await write(CMD.SET_CFG, 0, cfg);
         todo.cfg = false;
@@ -694,7 +713,7 @@
     let text = "";
     if (!device && pending) text = "Not connected — changes kept";
     else if (saveState === "saving" || (pending && device)) text = "Saving…";
-    else if (saveState === "error") text = "Write failed";
+    else if (saveState === "error") text = "Write failed — see Diagnostics";
     else if (saveState === "saved") text = "Saved to keyboard";
     note.textContent = text;
     note.hidden = !text;
@@ -1376,7 +1395,7 @@
     $("btn-pair-any")?.addEventListener("click", () => connect([{ vendorId: VID, productId: PID }]));
     $("btn-pair-scan")?.addEventListener("click", () => connect([{ vendorId: VID }]));
     $("btn-copy-diag")?.addEventListener("click", () => {
-      const text = ["diag-product", "diag-ids", "diag-interface", "diag-last", "diag-error", "diag-power", "diag-psd", "diag-cfg"]
+      const text = ["diag-product", "diag-ids", "diag-interface", "diag-last", "diag-error", "diag-power", "diag-psd", "diag-decode", "diag-cfg"]
         .map((id) => `${id}: ${($(id) || {}).textContent || ""}`).join("\n") + "\n\n" + wire.join("\n");
       navigator.clipboard?.writeText(text).then(() => toast("Diagnostics copied"));
     });
