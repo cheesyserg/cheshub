@@ -51,8 +51,8 @@
   padding: 0;
   overflow: hidden;
   border: 1.4px solid var(--line);
-  border-radius: 7px;
-  background: transparent;
+  border-radius: 9px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(0, 0, 0, 0.18));
   color: var(--text-dim);
   font-size: clamp(6px, 1.05cqw, 10px);
   font-weight: 600;
@@ -60,25 +60,27 @@
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.08s ease;
 }
-/* Keycap top surface, inset like the dish of a real cap. */
+/* Keycap top surface: a dished face set in from the skirt, deeper at the
+   front edge like a real sculpted cap. */
 .kb-key::before {
   content: "";
   position: absolute;
-  inset: 2px 3px 5px;
+  inset: 7% 9% 17%;
   border: 1px solid var(--line-soft);
-  border-radius: 5px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01));
   pointer-events: none;
 }
 /* Legend sits centred on the keycap top (the ::before surface) and never
    leaves it. */
 .kb-key span {
   position: absolute;
-  inset: 2px 3px 5px;
+  inset: 7% 9% 17%;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0 2px;
-  font-size: clamp(5px, 0.95cqw, 10px);
+  font-size: clamp(6px, 1.25cqw, 13px);
   letter-spacing: -0.2px;
   white-space: nowrap;
   overflow: hidden;
@@ -101,7 +103,8 @@
   border-radius: 50%;
   font-size: clamp(7px, 1.2cqw, 12px);
 }
-.kb-key.knob::before { inset: 3px; border-radius: 50%; }
+.kb-key.knob { background: radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2)); }
+.kb-key.knob::before { inset: 10%; border-radius: 50%; background: none; }
 .kb-key.knob span { inset: 3px; }
 /* The press target of the top-right knob gets knurled edges. */
 .kb-board.layout-knob .kb-key[data-key="82"]::before {
