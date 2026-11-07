@@ -827,19 +827,17 @@
     return SHORT[key.id] || key.label;
   }
 
-  /* Line-art case, traced from the retail B75: outer shell, inner bezel,
-     key well, top light bar, badge and vent hatching. */
+  /* Line-art case traced from the retail B75: outer shell, inner bezel, key
+     well and the iLovbee badge (a small rounded-corner plate, top left). */
   function caseArt() {
-    const knob = saved.layout !== "classic";
-    const hatch = Array.from({ length: 9 }, (_, i) =>
-      `<line x1="${(knob ? 700 : 760) + i * 7}" y1="30" x2="${(knob ? 706 : 766) + i * 7}" y2="20"/>`).join("");
     return `<svg class="kb-art" viewBox="0 0 879 399" preserveAspectRatio="none" aria-hidden="true">
       <rect class="art-shell" x="2" y="2" width="875" height="395" rx="30"/>
       <rect class="art-bezel" x="10" y="9" width="859" height="381" rx="24"/>
       <rect class="art-well" x="27" y="45" width="826" height="333" rx="12"/>
-      <rect class="art-bar" x="${knob ? 250 : 300}" y="18" width="${knob ? 300 : 280}" height="9" rx="4.5"/>
-      <g class="art-hatch">${hatch}</g>
-      <text class="art-badge" x="30" y="33">iLovbee</text>
+      <g class="art-badge">
+        <rect x="34" y="17" width="66" height="21" rx="5"/>
+        <text x="67" y="31.5" text-anchor="middle">iLovbee</text>
+      </g>
     </svg>`;
   }
 

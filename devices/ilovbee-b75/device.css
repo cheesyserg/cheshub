@@ -34,14 +34,11 @@
 .art-shell { stroke: var(--line); stroke-width: 1.6; filter: drop-shadow(0 14px 26px rgba(0, 0, 0, 0.35)); }
 .art-bezel { stroke: var(--line-soft); stroke-width: 1; }
 .art-well { stroke: var(--line-soft); stroke-width: 1; fill: rgba(255, 255, 255, 0.015) !important; }
-.art-bar { stroke: var(--line-soft); stroke-width: 1; }
-.art-hatch line { stroke: var(--line-soft); stroke-width: 1; }
-.art-badge {
-  fill: none;
-  stroke: var(--line);
-  stroke-width: 0.6;
-  font: 700 15px "Segoe UI", system-ui, sans-serif;
-  letter-spacing: 0.5px;
+.art-badge rect { stroke: var(--line); stroke-width: 1.2; fill: color-mix(in srgb, var(--text) 8%, transparent) !important; }
+.art-badge text {
+  fill: var(--line);
+  font: 700 10.5px "Segoe UI", system-ui, sans-serif;
+  letter-spacing: 0.3px;
 }
 
 .kb-key {
