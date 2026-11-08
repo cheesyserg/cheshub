@@ -135,9 +135,21 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a5", ATTRS{idProduct
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01e7", MODE="0660", TAG+="uaccess"
 # iLovbee B75 (2.4 GHz receiver)
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01bb", MODE="0660", TAG+="uaccess"
+# iLovbee B75 (Bluetooth; enumerates as 046D:B35A)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", KERNELS=="0005:046D:B35A.*", MODE="0660", TAG+="uaccess"
 ```
 
-Then reload the rules and re-plug the device (or its receiver):
+Bluetooth devices have no USB parent, so `ATTRS{idVendor}` never matches them.
+Their rules match the HID device name instead: bus `0005` (Bluetooth), then
+vendor and product id in upper-case hex. To find the name for another
+Bluetooth device:
+
+```bash
+for d in /sys/class/hidraw/hidraw*; do echo "$d $(basename "$(readlink -f "$d/device")")"; done
+```
+
+Then reload the rules and re-plug the device (or its receiver). For a
+Bluetooth device, disconnect and reconnect it in the system Bluetooth settings:
 
 ```bash
 sudo udevadm control --reload-rules
