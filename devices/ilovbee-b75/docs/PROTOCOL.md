@@ -242,3 +242,15 @@ single **1-byte input report `0x03`** and no output or feature reports, so
 nothing can be sent to the keyboard over Bluetooth: it is not configurable
 on that link. The studio recognises it and asks for the cable or receiver.
 What the `0x03` byte reports is not known **[open]**.
+
+GATT services on the same board (`bluetoothctl`): Generic Access, Device
+Information, Battery (`2A19`, notify), HID over GATT, and one custom
+service **`F200`** with a single characteristic **`F202`** (read, write,
+write-without-response; no descriptors, so it cannot notify). Reading it
+returns 18 zero bytes. Writing the receiver protocol's harmless status
+query (`cmd 0x07`) as 18 bytes, as 19 bytes with checksum, and as the full
+20-byte `0x13` frame was rejected each time (`org.bluez.Error.Failed`), and
+the value stayed zero. `F202` is therefore not a settings channel — most
+likely the chip's firmware-update characteristic — and must not be written
+to. The B75 cannot be configured over Bluetooth; only the standard battery
+level is readable.
