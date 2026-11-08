@@ -26,7 +26,10 @@ function connectionLabel(entry, device) {
   if (entry.id === "tozo-ht3") return "Bluetooth";
   if (entry.id === "tecknet-tk-gm012") return device && device.vendorId === 0x249A ? "2.4 GHz" : "USB";
   if (entry.id === "ajazz-aj139") return device && device.vendorId === 0xA8A5 ? "2.4 GHz" : "USB";
-  if (entry.id === "ilovbee-b75") return device && device.productId === 0x01BB ? "2.4 GHz" : "USB";
+  if (entry.id === "ilovbee-b75") {
+    if (device && device.vendorId === 0x046D) return "Bluetooth";
+    return device && device.productId === 0x01BB ? "2.4 GHz" : "USB";
+  }
   return "USB";
 }
 
@@ -211,6 +214,7 @@ function readAjazz(device) {
 /* iLovbee B75: GetPower (0x87) over the 0x208-byte feature report.
    Byte 0 of the reply data is read as the level (inferred, see PROTOCOL.md). */
 async function readB75(device) {
+  if (device.vendorId === 0x046D) return null;   // Bluetooth: format not known yet
   if (device.productId === 0x01BB) return readB75Wireless(device);
   const col = (device.collections || []).find((c) => c.usagePage >= 0xFF00 && (c.featureReports || []).length);
   if (!col) return null;
@@ -381,8 +385,13 @@ document.getElementById("btn-scan-vendor").addEventListener("click", async () =>
       location.href = match.path;
       return;
     }
-    const pages = (device.collections || []).map((c) =>
-      `  usagePage 0x${c.usagePage.toString(16).toUpperCase()} / usage 0x${c.usage.toString(16).toUpperCase()}`);
+    const size = (r) => Math.round((r.items || []).reduce((sum, it) => sum + it.reportSize * it.reportCount, 0) / 8);
+    const reports = (label, arr) => (arr || []).map((r) => `${label} 0x${r.reportId.toString(16).toUpperCase()} ${size(r)}B`);
+    const pages = (device.collections || []).map((c) => {
+      const detail = [...reports("in", c.inputReports), ...reports("out", c.outputReports), ...reports("feature", c.featureReports)];
+      return `  usagePage 0x${c.usagePage.toString(16).toUpperCase()} / usage 0x${c.usage.toString(16).toUpperCase()}`
+        + (detail.length ? `\n    ${detail.join(", ")}` : "");
+    });
     const out = document.getElementById("scan-result");
     out.hidden = false;
     out.textContent = [
