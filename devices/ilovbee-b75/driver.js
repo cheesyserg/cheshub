@@ -552,9 +552,22 @@
 
   async function attach(dev) {
     device = dev;
-    if (!device.opened) await device.open();
     setDiag("diag-product", device.productName || "—");
     setDiag("diag-ids", `${hex4(device.vendorId)} : ${hex4(device.productId)}`);
+    renderCollections();                 // shown even if opening fails
+    if (!device.opened) {
+      try {
+        await device.open();
+      } catch (err) {
+        device = null;
+        // Linux: hidraw nodes are root-only without a udev rule; on other
+        // systems another program (the iLovbee app) usually holds the device.
+        const linux = /Linux/i.test(navigator.userAgent) && !/Android|CrOS/i.test(navigator.userAgent);
+        throw new Error(linux
+          ? "Failed to open the device — add the udev rule for this keyboard (README → Linux: udev rules), then reconnect it"
+          : "Failed to open the device — close the iLovbee app or other programs using the keyboard and try again");
+      }
+    }
     renderCollections();
 
     if (isWireless(device)) {
@@ -583,6 +596,14 @@
     } else {
       link = "wired";
       watchReports();
+      // Over Bluetooth the board's vendor channel only sends (one 1-byte
+      // input report); with no output or feature report there is nothing
+      // to write settings to.
+      if (isBluetooth(device) && !(device.collections || []).some((c) => c.usagePage >= 0xFF00
+        && ((c.outputReports || []).length || (c.featureReports || []).length))) {
+        throw new Error("Bluetooth is read-only on this keyboard: its vendor channel only sends a status report ("
+          + reportShapes(device) + ") and cannot receive settings. Use the USB cable or the 2.4 GHz receiver");
+      }
       const pick = pickCollection(device);
       if (!pick) {
         if (isBluetooth(device)) {
@@ -657,7 +678,11 @@
       toast("Connected to iLovbee B75");
     } catch (err) {
       setDiag("diag-error", err.message, false);
-      toast(/Bluetooth channel/.test(err.message)
+      toast(/read-only/.test(err.message)
+        ? "The B75 can't be configured over Bluetooth. Connect it with the USB cable or the 2.4 GHz receiver."
+        : /udev rule/.test(err.message)
+        ? "Your system blocked access to the keyboard. Add the udev rule from the README, then reconnect."
+        : /Bluetooth channel/.test(err.message)
         ? "Bluetooth isn't supported for this keyboard yet. Details are in Diagnostics."
         : "Couldn't connect to the keyboard. See Diagnostics for details.");
     }

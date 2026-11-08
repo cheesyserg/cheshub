@@ -72,9 +72,9 @@ debounce, sleep, invert scroll).
 
 Wired USB (`258A:01E7`) and the 2.4 GHz receiver (`258A:01BB`). Over
 Bluetooth the board appears as `046D:B35A` ("B75", reusing Logitech's vendor
-id) with a vendor channel on `0xFF00` / usage `2`; the studio drives it when
-that channel carries a known report format and otherwise says so — the
-vendor tool disables Bluetooth for this model. Protocol reverse-engineered from the vendor's
+id), but its vendor channel only sends a 1-byte status report and cannot
+receive anything, so it can't be configured that way — the studio says so
+and points to the cable or receiver. Protocol reverse-engineered from the vendor's
 iLovbee utility (`CDevG5KB`, `Fw=2`) and its `Dev/01E7/KB.ini`, documented
 with every field marked in
 [`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
@@ -135,9 +135,21 @@ KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="a8a5", ATTRS{idProduct
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01e7", MODE="0660", TAG+="uaccess"
 # iLovbee B75 (2.4 GHz receiver)
 KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="258a", ATTRS{idProduct}=="01bb", MODE="0660", TAG+="uaccess"
+# iLovbee B75 (Bluetooth; enumerates as 046D:B35A)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", KERNELS=="0005:046D:B35A.*", MODE="0660", TAG+="uaccess"
 ```
 
-Then reload the rules and re-plug the device (or its receiver):
+Bluetooth devices have no USB parent, so `ATTRS{idVendor}` never matches them.
+Their rules match the HID device name instead: bus `0005` (Bluetooth), then
+vendor and product id in upper-case hex. To find the name for another
+Bluetooth device:
+
+```bash
+for d in /sys/class/hidraw/hidraw*; do echo "$d $(basename "$(readlink -f "$d/device")")"; done
+```
+
+Then reload the rules and re-plug the device (or its receiver). For a
+Bluetooth device, disconnect and reconnect it in the system Bluetooth settings:
 
 ```bash
 sudo udevadm control --reload-rules
