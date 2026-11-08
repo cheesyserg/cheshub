@@ -596,6 +596,14 @@
     } else {
       link = "wired";
       watchReports();
+      // Over Bluetooth the board's vendor channel only sends (one 1-byte
+      // input report); with no output or feature report there is nothing
+      // to write settings to.
+      if (isBluetooth(device) && !(device.collections || []).some((c) => c.usagePage >= 0xFF00
+        && ((c.outputReports || []).length || (c.featureReports || []).length))) {
+        throw new Error("Bluetooth is read-only on this keyboard: its vendor channel only sends a status report ("
+          + reportShapes(device) + ") and cannot receive settings. Use the USB cable or the 2.4 GHz receiver");
+      }
       const pick = pickCollection(device);
       if (!pick) {
         if (isBluetooth(device)) {
@@ -670,7 +678,9 @@
       toast("Connected to iLovbee B75");
     } catch (err) {
       setDiag("diag-error", err.message, false);
-      toast(/udev rule/.test(err.message)
+      toast(/read-only/.test(err.message)
+        ? "The B75 can't be configured over Bluetooth. Connect it with the USB cable or the 2.4 GHz receiver."
+        : /udev rule/.test(err.message)
         ? "Your system blocked access to the keyboard. Add the udev rule from the README, then reconnect."
         : /Bluetooth channel/.test(err.message)
         ? "Bluetooth isn't supported for this keyboard yet. Details are in Diagnostics."

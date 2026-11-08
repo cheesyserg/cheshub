@@ -237,10 +237,8 @@ over Bluetooth and has no code for its channel.
 
 Observed on a paired board: the keyboard enumerates as **`046D:B35A`**,
 product name `B75` (Logitech's vendor id), with collections `0xFF00 / 2`,
-`0x0C / 1` (twice) and `0x01 / 2`. The vendor channel is `0xFF00 / 2`, not
-the receiver's `0xFF02 / 2`. Its report layout is not known yet **[open]**.
-
-The studio picks the protocol from that channel's reports: output report
-`0x13` → the wireless frames above; a 0x208-byte feature report → the wired
-frames; anything else is refused with the report ids and sizes shown in
-Diagnostics.
+`0x0C / 1` (twice) and `0x01 / 2`. The vendor channel `0xFF00 / 2` carries a
+single **1-byte input report `0x03`** and no output or feature reports, so
+nothing can be sent to the keyboard over Bluetooth: it is not configurable
+on that link. The studio recognises it and asks for the cable or receiver.
+What the `0x03` byte reports is not known **[open]**.

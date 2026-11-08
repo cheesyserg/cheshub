@@ -72,9 +72,9 @@ debounce, sleep, invert scroll).
 
 Wired USB (`258A:01E7`) and the 2.4 GHz receiver (`258A:01BB`). Over
 Bluetooth the board appears as `046D:B35A` ("B75", reusing Logitech's vendor
-id) with a vendor channel on `0xFF00` / usage `2`; the studio drives it when
-that channel carries a known report format and otherwise says so — the
-vendor tool disables Bluetooth for this model. Protocol reverse-engineered from the vendor's
+id), but its vendor channel only sends a 1-byte status report and cannot
+receive anything, so it can't be configured that way — the studio says so
+and points to the cable or receiver. Protocol reverse-engineered from the vendor's
 iLovbee utility (`CDevG5KB`, `Fw=2`) and its `Dev/01E7/KB.ini`, documented
 with every field marked in
 [`devices/ilovbee-b75/docs/PROTOCOL.md`](devices/ilovbee-b75/docs/PROTOCOL.md).
