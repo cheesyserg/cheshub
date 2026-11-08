@@ -43,7 +43,9 @@ window.CHESHUB_DEVICES = [
       { vendorId: 0x258A, productId: 0x01E7, usagePage: 0xFF00 },
       { vendorId: 0x258A, productId: 0x01E7, usagePage: 0xFF02 },
       // 2.4 GHz receiver: wireless channel on 0xFF02 / usage 2, report 0x13.
-      { vendorId: 0x258A, productId: 0x01BB, usagePage: 0xFF02, usage: 0x02 }
+      { vendorId: 0x258A, productId: 0x01BB, usagePage: 0xFF02, usage: 0x02 },
+      // Bluetooth: the board reports Logitech's vendor id (046D:B35A, "B75").
+      { vendorId: 0x046D, productId: 0xB35A, usagePage: 0xFF00, usage: 0x02 }
     ]
   },
   {

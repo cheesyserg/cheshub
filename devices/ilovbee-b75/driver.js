@@ -12,12 +12,17 @@
   const VID = 0x258A;
   const PID = 0x01E7;
   const DONGLE_PID = 0x01BB;           // "2.4G Wireless Receiver"
+  const BT_VID = 0x046D;
+  const BT_PID = 0xB35A;
   const FILTERS = [
     { vendorId: VID, productId: PID, usagePage: 0xFF00 },
     { vendorId: VID, productId: PID, usagePage: 0xFF02 },
     { vendorId: VID, productId: DONGLE_PID, usagePage: 0xFF02, usage: 0x02 },
     // Bluetooth: same vendor channel as the receiver if the firmware exposes it.
-    { vendorId: VID, usagePage: 0xFF02, usage: 0x02 }
+    { vendorId: VID, usagePage: 0xFF02, usage: 0x02 },
+    // Bluetooth as observed: the board reports Logitech's vendor id with its
+    // own product id and name "B75", and one vendor channel on 0xFF00 / 2.
+    { vendorId: BT_VID, productId: BT_PID, usagePage: 0xFF00, usage: 0x02 }
   ];
 
   /* Wireless link (receiver, and Bluetooth when exposed): CDev3632. 20-byte
@@ -579,7 +584,12 @@
       link = "wired";
       watchReports();
       const pick = pickCollection(device);
-      if (!pick) throw new Error("this interface can't be configured — use Try Another Interface");
+      if (!pick) {
+        if (isBluetooth(device)) {
+          throw new Error("this Bluetooth channel uses a format the studio doesn't know yet: " + reportShapes(device));
+        }
+        throw new Error("this interface can't be configured — use Try Another Interface");
+      }
       reportId = pick.reportId;
       featureBytes = pick.bytes || PAYLOAD;
       setDiag("diag-interface",
@@ -602,18 +612,36 @@
 
   /* The receiver (and a Bluetooth link) carries the 0x13 report on
      0xFF02 / usage 2; the wired board uses the 0x208 feature report. */
+  /* The wireless protocol rides on a vendor collection with output report
+     0x13 (the receiver: 0xFF02 / 2). Bluetooth exposes 0xFF00 / 2 instead and
+     the vendor tool never drives it, so the protocol is chosen by the shape
+     of its reports: report 0x13 -> wireless frames, a 0x208-byte feature
+     report -> the wired frames. */
   function wirelessCollection(dev) {
-    return (dev.collections || []).find((c) => c.usagePage === 0xFF02 && c.usage === 0x02
+    return (dev.collections || []).find((c) => c.usagePage >= 0xFF00
       && (c.outputReports || []).some((r) => r.reportId === WL_REPORT));
   }
 
+  function isBluetooth(dev) {
+    return dev.vendorId === BT_VID && dev.productId === BT_PID;
+  }
+
   function isWireless(dev) {
-    if (dev.productId === PID) return false;
-    return !!wirelessCollection(dev) || dev.productId === DONGLE_PID;
+    if (dev.productId === PID && dev.vendorId === VID) return false;
+    return !!wirelessCollection(dev) || (dev.vendorId === VID && dev.productId === DONGLE_PID);
+  }
+
+  function reportShapes(dev) {
+    const size = (r) => Math.round((r.items || []).reduce((sum, it) => sum + it.reportSize * it.reportCount, 0) / 8);
+    return (dev.collections || []).filter((c) => c.usagePage >= 0xFF00).map((c) => {
+      const list = (kind, arr) => (arr || []).map((r) => `${kind} 0x${r.reportId.toString(16)}:${size(r)}B`);
+      return `0x${hex4(c.usagePage)}/${c.usage}: ` + [...list("in", c.inputReports), ...list("out", c.outputReports), ...list("feat", c.featureReports)].join(" ");
+    }).join(" | ");
   }
 
   function linkLabel() {
     if (!device) return "None";
+    if (isBluetooth(device)) return "Bluetooth";
     if (link === "wired") return "USB Wired";
     return device.productId === DONGLE_PID || /receiver|dongle/i.test(device.productName || "") ? "2.4 GHz" : "Bluetooth";
   }
@@ -629,7 +657,9 @@
       toast("Connected to iLovbee B75");
     } catch (err) {
       setDiag("diag-error", err.message, false);
-      toast("Couldn't connect to the keyboard. See Diagnostics for details.");
+      toast(/Bluetooth channel/.test(err.message)
+        ? "Bluetooth isn't supported for this keyboard yet. Details are in Diagnostics."
+        : "Couldn't connect to the keyboard. See Diagnostics for details.");
     }
   }
 
@@ -638,7 +668,8 @@
     try {
       const granted = await navigator.hid.getDevices();
       const match = granted.find((dev) => dev.vendorId === VID && dev.productId === PID && pickCollection(dev))
-        || granted.find((dev) => dev.vendorId === VID && isWireless(dev));
+        || granted.find((dev) => dev.vendorId === VID && isWireless(dev))
+        || granted.find((dev) => isBluetooth(dev) && (isWireless(dev) || pickCollection(dev)));
       if (match) await attach(match);
     } catch (err) {
       setDiag("diag-error", err.message, false);
@@ -1728,8 +1759,8 @@
     const box = $("diag-collections");
     if (!box || !device) return;
     box.innerHTML = (device.collections || []).map((c) => {
-      const feats = (c.featureReports || []).map((r) => `0x${r.reportId.toString(16)}:${Math.round((r.items || []).reduce((s, it) => s + it.reportSize * it.reportCount, 0) / 8)}B`).join(", ") || "none";
-      return `<div class="diag-row"><code>page 0x${hex4(c.usagePage)} / 0x${hex4(c.usage)}</code><span>feature ${feats}</span></div>`;
+      const fmt = (arr) => (arr || []).map((r) => `0x${r.reportId.toString(16)}:${Math.round((r.items || []).reduce((s, it) => s + it.reportSize * it.reportCount, 0) / 8)}B`).join(", ") || "none";
+      return `<div class="diag-row"><code>page 0x${hex4(c.usagePage)} / 0x${hex4(c.usage)}</code><span>in ${fmt(c.inputReports)} · out ${fmt(c.outputReports)} · feature ${fmt(c.featureReports)}</span></div>`;
     }).join("");
   }
 

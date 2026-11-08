@@ -233,7 +233,14 @@ Payloads are identical to the wired ones.
 ## Bluetooth
 
 `Cfg.ini` sets `DisableBT=1`, so the vendor tool never configures this model
-over Bluetooth. The studio uses the wireless protocol above for any
-`258A` device exposing the `0xFF02` / usage `2` channel with report `0x13`,
-which is how a Bluetooth link would most likely appear. **[inferred,
-untested]**
+over Bluetooth and has no code for its channel.
+
+Observed on a paired board: the keyboard enumerates as **`046D:B35A`**,
+product name `B75` (Logitech's vendor id), with collections `0xFF00 / 2`,
+`0x0C / 1` (twice) and `0x01 / 2`. The vendor channel is `0xFF00 / 2`, not
+the receiver's `0xFF02 / 2`. Its report layout is not known yet **[open]**.
+
+The studio picks the protocol from that channel's reports: output report
+`0x13` → the wireless frames above; a 0x208-byte feature report → the wired
+frames; anything else is refused with the report ids and sizes shown in
+Diagnostics.
